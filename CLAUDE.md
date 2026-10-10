@@ -21,6 +21,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - `server/index.js` — phòng chơi (in-memory `rooms`), sự kiện socket, lập lịch bot theo `room.options.botSpeed`.
 - `server/simulate.js` — test bất biến: không mất bài, không âm vàng, game luôn kết thúc.
 - `public/app.js` — client: nhận `state`, vẽ lại toàn bộ bằng template string, sự kiện qua `data-act`. `public/style.css` — theme tối trung cổ, token màu ở `:root`. `public/icons.js` — sinh tự động, không sửa tay.
+- `public/voice.js` — thoại theo phòng (`window.Voice`): WebRTC mesh, người vào sau gửi offer; server chỉ chuyển `voice:signal` giữa người cùng phòng đang trong thoại, trạng thái ở `members[].voice` (`null|'on'|'muted'`). Viền "đang nói" cập nhật bằng `updateVoiceDom()` (không vẽ lại cả trang). TURN tùy chọn qua env `TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL` → `/ice.json`. Preview: view `voice`, `voicelobby`.
 - `public/city3d.js` — ES module Three.js (`window.City3D`): bàn tròn, mỗi người 1 khu đất, mỗi loại công trình 1 mẫu nhà low-poly dựng bằng code trong object `BUILD` (thêm công trình mới → thêm hàm dựng). Canvas được giữ nguyên qua các lần vẽ lại: `sync3d()` trong app.js chuyển nó vào `#board-slot`. Three.js phục vụ từ `node_modules` qua `/vendor/three` + importmap trong `index.html`.
 
 ## Quy ước

@@ -24,6 +24,7 @@
   </script>
   <script src="states.js"></script>
   <script src="icons.js"></script>
+  <script src="voice.js"></script>
   <script src="app.js"></script>
   <script type="module" src="city3d.js"></script>
   <script>
@@ -42,6 +43,13 @@
     }
     else if (which === 'ability') { handlers.state(STATES.myturn); ui.abilityPopup = true; render(); }
     else if (which === 'chatbadge') { handlers.state(STATES.wait); ui.chatSeenAt = 0; render(); }
+    else if (which === 'voice' || which === 'voicelobby') {
+      // Thoại: bạn (p0) đang nói, Mai tắt micro, Bot Merlin… không có thoại
+      const st = JSON.parse(JSON.stringify(which === 'voice' ? STATES.wait : STATES.lobby));
+      st.room.members.forEach((m) => { if (m.id === 'p0') m.voice = 'on'; if (m.id === 'p3') { m.online = true; m.voice = 'muted'; } });
+      Voice.on = true; Voice.peerState = () => 'connected'; Voice.speaking = new Set(['p0']);
+      handlers.state(st);
+    }
     else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }
     else if (which === 'dock') { handlers.state(STATES.myturn); ui.turnPopupHidden = true; render(); }
     else if (which === 'logfresh') {

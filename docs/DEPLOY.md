@@ -10,7 +10,7 @@ Không cần domain, server hay IP public. Có 2 cách:
 | Chi phí | Miễn phí, không cần tài khoản | Miễn phí, cần tài khoản GitHub + Render |
 | Hạn chế | Tắt máy / tắt terminal là mất link | Ngủ sau 15 phút không ai vào; lần vào đầu chờ 30–50 giây; ván đang chơi mất khi server ngủ/khởi động lại |
 
-Cả hai cách đều chạy được Socket.IO (WebSocket) và bàn 3D.
+Cả hai cách đều chạy được Socket.IO (WebSocket), bàn 3D và **thoại** (cả hai đều là HTTPS — trình duyệt chỉ cho dùng micro trên HTTPS hoặc `localhost`; vào qua `http://<IP-LAN>:3000` thì không bật thoại được).
 
 ---
 
@@ -121,3 +121,22 @@ Render tự build và deploy lại (mất ~2 phút; các ván đang chơi sẽ b
 - Phòng chơi lưu trong bộ nhớ: server ngủ / deploy lại = mất các phòng đang chơi. Nên deploy khi không có ai đang chơi.
 - Chỉ chạy **1 instance** (phòng lưu trong RAM của 1 tiến trình) — không bật scale nhiều instance.
 - Mỗi tháng gói miễn phí có giới hạn giờ chạy; chơi giữa bạn bè thường không chạm tới.
+
+---
+
+## Thoại: khi có người không nghe được (TURN)
+
+Thoại nối thẳng giữa các trình duyệt (WebRTC), server chỉ làm trung gian bắt tay nên không tốn băng thông server.
+Phần lớn mạng nhà / Wi-Fi nối thẳng được. Một số mạng (4G của vài nhà mạng, Wi-Fi công ty) chặn kết nối thẳng —
+khi đó huy hiệu micro của người kia chuyển **xám** ("không nối được"). Cách khắc phục là thêm máy chủ chuyển tiếp **TURN**:
+
+1. Đăng ký một dịch vụ TURN có gói miễn phí, ví dụ Metered.ca (Open Relay) hoặc Cloudflare Calls TURN, lấy địa chỉ + username + credential.
+2. Trên Render: dịch vụ → **Environment** → thêm biến (đây là thông tin bí mật, **không** ghi vào code / `render.yaml`):
+
+| Biến | Ví dụ |
+|---|---|
+| `TURN_URLS` | `turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443?transport=tcp` (nhiều địa chỉ cách nhau bằng dấu phẩy) |
+| `TURN_USERNAME` | username dịch vụ cấp |
+| `TURN_CREDENTIAL` | mật khẩu/credential dịch vụ cấp |
+
+3. Render tự khởi động lại; mọi người tải lại trang rồi vào thoại lại. Chạy ở máy mình (cách 1): `TURN_URLS=... TURN_USERNAME=... TURN_CREDENTIAL=... npm start`.

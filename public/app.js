@@ -165,10 +165,90 @@ function sceneSvg(key, color) {
   return (sceneCache[id] = out);
 }
 
-function avatar(name, { isBot = false, online = null, id = name } = {}) {
+function avatar(name, { isBot = false, online = null, id = name, voiceAct = false } = {}) {
   const inner = isBot ? icon('robot') : esc(String(name).trim().charAt(0).toUpperCase() || '?');
   const dot = online === null ? '' : `<span class="on-dot ${online ? '' : 'off'}"></span>`;
-  return `<span class="avatar" style="--h:${hue(id)}">${inner}${dot}</span>`;
+  const speak = window.Voice && Voice.speaking.has(id) ? 'speaking' : '';
+  return `<span class="avatar ${speak}" data-voice="${esc(id)}" style="--h:${hue(id)}">${inner}${dot}${voiceBadge(id, voiceAct)}</span>`;
+}
+
+// ---------- Thoại (WebRTC, xem voice.js) ----------
+// Icon nét vẽ (SVG) — emoji micro hiển thị không đều giữa các máy
+const VSVG = {
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>',
+  micOff: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/><path class="x" d="M4 4l16 16"/>',
+  head: '<path d="M4 16v-4a8 8 0 0 1 16 0v4"/><rect x="3" y="14" width="4.5" height="7" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="7" rx="1.5"/>',
+  headOff: '<path d="M4 16v-4a8 8 0 0 1 16 0v4"/><rect x="3" y="14" width="4.5" height="7" rx="1.5"/><rect x="16.5" y="14" width="4.5" height="7" rx="1.5"/><path class="x" d="M4 4l16 16"/>',
+  spkOff: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path class="x" d="M16 9.5l5 5M21 9.5l-5 5"/>',
+  hang: '<path d="M3 14.5c5-4.6 13-4.6 18 0l-2.3 2.7-3.6-1.5v-2.5a12 12 0 0 0-6.2 0v2.5l-3.6 1.5z"/>',
+};
+const vIcon = (k) => `<svg class="vi" viewBox="0 0 24 24" aria-hidden="true">${VSVG[k]}</svg>`;
+const voiceOf = (id) => { const m = S.room && S.room.members.find((x) => x.id === id); return m ? m.voice : null; };
+// Trạng thái huy hiệu micro trên avatar: đang tắt mic / bị mình tắt tiếng / đang nối / không nối được
+function voiceBadgeCls(id) {
+  const v = voiceOf(id);
+  const V = window.Voice;
+  const cls = ['v-badge'];
+  if (v === 'muted') cls.push('muted');
+  if (V && V.silenced.has(id)) cls.push('silenced');
+  if (V && V.on && id !== S.you) {
+    const st = V.peerState(id);
+    if (st === 'failed') cls.push('fail');
+    else if (st !== 'connected') cls.push('wait');
+  }
+  return cls.join(' ');
+}
+function voiceBadgeTip(id) {
+  const V = window.Voice;
+  if (id === S.you) return V && V.muted ? tx('Micro của bạn đang tắt — bấm để bật', 'Your mic is off — click to unmute') : tx('Bạn đang trong thoại — bấm để tắt micro', 'You are in voice — click to mute');
+  const st = V && V.on ? V.peerState(id) : 'connected';
+  if (st === 'failed') return tx('Không nối được âm thanh với người này (mạng chặn kết nối trực tiếp)', 'Could not connect audio with this player (network blocks direct connections)');
+  if (st !== 'connected') return tx('Đang nối âm thanh…', 'Connecting audio…');
+  const muted = voiceOf(id) === 'muted' ? tx('Đang tắt micro. ', 'Mic is off. ') : '';
+  return muted + (V && V.silenced.has(id) ? tx('Bạn đã tắt tiếng người này — bấm để nghe lại', 'You muted this player — click to hear them again') : tx('Đang trong thoại — bấm để tắt tiếng riêng người này', 'In voice — click to mute this player for you'));
+}
+function voiceBadge(id, clickable) {
+  const v = voiceOf(id);
+  if (!v) return '';
+  const ic = vIcon(v === 'muted' ? 'micOff' : window.Voice && Voice.silenced.has(id) ? 'spkOff' : 'mic');
+  return `<span class="${voiceBadgeCls(id)}" ${clickable ? `data-act="voicePeer" data-id="${esc(id)}"` : ''} title="${esc(voiceBadgeTip(id))}">${ic}</span>`;
+}
+// Cập nhật nhẹ (không vẽ lại cả trang): viền người đang nói + trạng thái kết nối
+function updateVoiceDom() {
+  document.querySelectorAll('[data-voice]').forEach((el) => {
+    const id = el.dataset.voice;
+    el.classList.toggle('speaking', !!window.Voice && Voice.speaking.has(id));
+    const b = el.querySelector('.v-badge');
+    if (b) { b.className = voiceBadgeCls(id); b.title = voiceBadgeTip(id); }
+  });
+}
+
+function voiceCtl() {
+  const V = window.Voice;
+  if (!V || !S.room) return '';
+  const n = S.room.members.filter((m) => m.voice).length;
+  const cnt = n ? `<span class="v-count" title="${tx('Số người đang trong thoại', 'People in voice')}">${n}</span>` : '';
+  if (!V.on) {
+    return `<button class="small voice-btn" data-act="voiceJoin" ${V.busy ? 'disabled' : ''} title="${tx('Vào kênh thoại của phòng (cần micro)', 'Join the room voice chat (needs a microphone)')}">${vIcon('mic')} <span class="tb-l">${V.busy ? tx('Đang bật…', 'Starting…') : tx('Thoại', 'Voice')}</span>${cnt}</button>`;
+  }
+  return `<span class="voice-ctl">
+    <button class="small v-mic ${V.muted ? 'off' : ''}" data-act="voiceMute" title="${V.muted ? tx('Bật micro (M)', 'Unmute (M)') : tx('Tắt micro (M)', 'Mute (M)')}">${vIcon(V.muted ? 'micOff' : 'mic')}</button>
+    <button class="small v-deaf ${V.deaf ? 'off' : ''}" data-act="voiceDeaf" title="${V.deaf ? tx('Bật loa', 'Undeafen') : tx('Tắt loa — không nghe người khác', 'Deafen — stop hearing others')}">${vIcon(V.deaf ? 'headOff' : 'head')}</button>
+    <button class="small v-leave" data-act="voiceLeave" title="${tx('Rời thoại', 'Leave voice')}">${vIcon('hang')} <span class="tb-l">${tx('Rời thoại', 'Leave')}</span>${cnt}</button>
+  </span>`;
+}
+
+const VOICE_ERR = {
+  insecure: ['Thoại cần kết nối HTTPS (hoặc localhost). Hãy mở game bằng link https.', 'Voice needs HTTPS (or localhost). Open the game via an https link.'],
+  unsupported: ['Trình duyệt này không hỗ trợ thoại.', 'This browser does not support voice chat.'],
+  denied: ['Chưa được cấp quyền micro — bấm biểu tượng ổ khóa trên thanh địa chỉ để cho phép.', 'Microphone permission denied — allow it from the lock icon in the address bar.'],
+  nomic: ['Không tìm thấy micro.', 'No microphone found.'],
+};
+async function voiceJoin() {
+  try { await Voice.join(); toast(tx('Đã vào thoại — bấm M để tắt/bật micro', 'Joined voice — press M to mute/unmute'), 'info'); } catch (e) {
+    console.warn(e);
+    toast(tx(...(VOICE_ERR[e.code] || VOICE_ERR.denied)));
+  }
 }
 
 function toast(msg, kind = '') {
@@ -180,12 +260,17 @@ function toast(msg, kind = '') {
 }
 
 // ---------- Nhận trạng thái ----------
-socket.on('connect', () => { ui.connected = true; socket.emit('hello', { id: myId }); });
+socket.on('connect', () => { ui.connected = true; socket.emit('hello', { id: myId }); if (window.Voice) Voice.rejoin(); });
+if (window.Voice) {
+  Voice.init(socket, () => S.you || myId);
+  Voice.onChange = (kind) => (kind === 'state' ? render() : updateVoiceDom());
+}
 socket.on('disconnect', () => { ui.connected = false; toast(tx('Mất kết nối, đang thử lại...', 'Disconnected, reconnecting...')); render(); });
 // Lỗi từ server: chuỗi (cũ) hoặc { vi, en }
 socket.on('errorMsg', (m) => toast(typeof m === 'string' ? m : tx(m.vi, m.en || m.vi)));
 socket.on('state', (s) => {
   S = s;
+  if (window.Voice) Voice.sync(s.room ? s.room.members : null);
   const g = s.game;
   CHARS = g && g.cast ? castToChars(g.cast) : BASE_CHARS;
   // Lượt mới (hoặc Phù thủy tiếp quản): xóa mọi lựa chọn dang dở
@@ -645,7 +730,7 @@ function renderLobby() {
   const issue = custom && charData() ? castIssue(r.options.chars || [], r.members.length) : null;
   const link = `${location.origin}${location.pathname}?room=${r.code}`;
   const seats = r.members.map((m) => `<div class="seat">
-      ${avatar(m.name, { isBot: m.isBot, online: m.online, id: m.id })}
+      ${avatar(m.name, { isBot: m.isBot, online: m.online, id: m.id, voiceAct: true })}
       <div class="grow"><div class="nm">${esc(m.name)}</div>
         <div class="muted" style="font-size:12px">${m.id === r.hostId ? tx('Chủ phòng', 'Host') : m.isBot ? 'Bot' : tx('Người chơi', 'Player')}${m.id === S.you ? tx(' · Bạn', ' · You') : ''}</div></div>
       ${host && m.id !== S.you ? `<button class="small ghost danger" data-act="kick" data-id="${m.id}" title="${tx('Mời ra', 'Kick')}">✕</button>` : ''}
@@ -656,7 +741,7 @@ function renderLobby() {
     <div class="box">
       <div class="row" style="justify-content:space-between;align-items:flex-end">
         <div><div class="muted" style="font-size:13px;margin-bottom:6px">${tx('Mã phòng — gửi cho bạn bè', 'Room code — share with friends')}</div><div class="code">${r.code}</div></div>
-        <div class="row"><button data-act="copy" data-link="${esc(link)}">📋 ${tx('Sao chép link mời', 'Copy invite link')}</button>${langBtn('')}</div>
+        <div class="row">${voiceCtl()}<button data-act="copy" data-link="${esc(link)}">📋 ${tx('Sao chép link mời', 'Copy invite link')}</button>${langBtn('')}</div>
       </div>
       <div class="section-title" style="margin-top:22px">${tx('Người chơi', 'Players')} ${r.members.length}/${maxP}</div>
       <div class="seats">${seats}${empty}</div>
@@ -694,6 +779,7 @@ function renderGame() {
     ${g.taxPool !== null && g.taxPool !== undefined ? `<span class="stat" title="${tx('Kho thuế — Người thu thuế lấy hết khi lộ diện', 'Tax pool — the Tax Collector takes it all when revealed')}">${icon('taxcollector')} <span class="tb-l">${tx('Kho thuế', 'Tax pool')}</span> <b>${g.taxPool}</b></span>` : ''}
     <span class="spacer"></span>
     <button class="small" data-act="rules" title="${tx('Luật chơi & mẹo', 'Rules & tips')}">📜 <span class="tb-l">${tx('Luật chơi & mẹo', 'Rules & tips')}</span></button>
+    ${voiceCtl()}
     ${chatButton()}
     ${langBtn()}
     ${host && g.phase !== 'ended' ? `<span class="stat tb-bot"><span class="tb-l">Bot</span> ${seg('botSpeed', speeds(), r.options.botSpeed || 'normal', true)}</span>` : ''}
@@ -892,7 +978,7 @@ function renderPlayer(p, i) {
   const pct = Math.min(100, Math.round((size / g.target) * 100));
   // 1 hàng gọn: [avatar] [tên + nhân vật] [vàng · bài · công trình] [thành phố thu nhỏ]
   return `<div class="prow ${i === g.me ? 'me' : ''} ${active ? 'active' : ''}">
-    ${avatar(p.name, { isBot: p.isBot, online, id: p.id })}
+    ${avatar(p.name, { isBot: p.isBot, online, id: p.id, voiceAct: true })}
     <div class="pr-who">
       <div class="pr-name">${p.hasCrown ? `<span class="crown" title="${tx('Giữ vương miện', 'Holds the crown')}">${icon('king')}</span>` : ''}<span class="nm">${esc(p.name)}</span>${i === g.me ? `<span class="you">${tx('bạn', 'you')}</span>` : ''}</div>
       <div class="pr-sub">${doing ? `<span class="now">▶ ${doing}</span>` : p.chars.map((c) => `<span class="pr-char">${medal(c, 'sm')}${chName(c)}</span>`).join('') || '<span class="muted">—</span>'}</div>
@@ -1651,6 +1737,13 @@ document.addEventListener('click', (e) => {
       if (ui.chatOpen) { const i = $('#chatInput'); if (i) i.focus(); }
       return;
     case 'lang': return setLang(ui.lang === 'en' ? 'vi' : 'en');
+    case 'voiceJoin': return voiceJoin();
+    case 'voiceMute': return Voice.setMuted(!Voice.muted);
+    case 'voiceDeaf': return Voice.setDeaf(!Voice.deaf);
+    case 'voiceLeave': return Voice.leave();
+    case 'voicePeer':
+      if (id === S.you) return Voice.on && Voice.setMuted(!Voice.muted);
+      return Voice.toggleSilence(id);
     case 'reset3d': if (window.City3D) City3D.resetCamera(); return render();
     case 'toggle3d':
       ui.show3d = !ui.show3d;
@@ -1686,6 +1779,7 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if ((e.key === 'm' || e.key === 'M') && window.Voice && Voice.on && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) Voice.setMuted(!Voice.muted);
   if (e.key === 'Escape' && ui.rulesOpen) { ui.rulesOpen = false; renderModal(); }
   else if (e.key === 'Escape' && ui.chatOpen) { ui.chatOpen = false; render(); }
 });
