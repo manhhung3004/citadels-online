@@ -1,0 +1,9 @@
+# Cấu hình deploy lên Render.com (gói miễn phí). Xem docs/DEPLOY.md — cách 2.
+services:
+  - type: web
+    name: citadels-online
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /

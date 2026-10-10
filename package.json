@@ -1,0 +1,20 @@
+{
+  "name": "citadels-online",
+  "version": "1.1.0",
+  "description": "Citadels board game - chơi online nhiều người",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/ && node server/simulate.js",
+    "icons": "node scripts/fetch-icons.js",
+    "preview": "node scripts/preview/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "three": "^0.160.0"
+  }
+}

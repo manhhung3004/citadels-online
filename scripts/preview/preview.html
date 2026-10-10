@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Playfair+Display:wght@700;800&family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="overlay"></div>
+  <div id="modal"></div>
+  <div id="toast"></div>
+  <script>
+    // socket.io giả để xem giao diện không cần server game
+    const handlers = {};
+    window.io = () => ({ on: (e, f) => { handlers[e] = f; }, emit: () => {} });
+    window.addEventListener('error', (e) => { document.title = 'ERR ' + e.message; });
+    // ?lang=en: xem trước bản tiếng Anh (app.js đọc ngôn ngữ từ localStorage khi tải)
+    try { localStorage.setItem('citadels-lang', /[?&]lang=en/.test(location.search) ? 'en' : 'vi'); } catch (_) {}
+  </script>
+  <script src="states.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+  <script type="module" src="city3d.js"></script>
+  <script>
+    const which = location.hash.slice(1) || 'turn';
+    DISTRICT_DATA = window.CARDS;
+    const tabM = which.match(/^rules-([a-z]+)$/);
+    if (tabM) { handlers.state(STATES.turn); ui.rulesOpen = true; ui.rulesTab = tabM[1]; renderModal(); }
+    else if (which === 'warlord') { handlers.state(STATES.turn); ui.mode = 'warlord'; render(); }
+    else if (which === 'fx') {
+      // Giả lập: lá bài đang được rê chuột + nhân vật vừa lộ diện (lật 3D)
+      handlers.state(STATES.turn);
+      const card = document.querySelectorAll('.fan .dcard')[1];
+      card.style.setProperty('--ry', '9deg'); card.style.setProperty('--rx', '6deg');
+      card.style.setProperty('--mx', '75%'); card.style.setProperty('--my', '25%'); card.classList.add('hov');
+      ui.announceKey = 'x'; announce(STATES.turn.game);
+    }
+    else if (which === 'ability') { handlers.state(STATES.myturn); ui.abilityPopup = true; render(); }
+    else if (which === 'chatbadge') { handlers.state(STATES.wait); ui.chatSeenAt = 0; render(); }
+    else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }
+    else if (which === 'dock') { handlers.state(STATES.myturn); ui.turnPopupHidden = true; render(); }
+    else if (which === 'logfresh') {
+      // Lượt người khác: dải trạng thái mỏng + 4 dòng nhật ký cuối được đánh dấu là mới
+      handlers.state(STATES.wait);
+      const g = STATES.wait.game;
+      ui.freshFrom = g.log[g.log.length - 1].id - 4; render(); // 4 dòng cuối được coi là mới
+    }
+    else if (which === 'relayout') {
+      // Đổi sang ván khác (thứ tự người chơi khác) → bàn 3D dựng lại; nhãn tên không được nhân đôi
+      handlers.state(STATES.turn);
+      setTimeout(() => handlers.state(STATES.wait), 1500);
+      setTimeout(() => { document.title = 'LABELS=' + document.querySelectorAll('.c3-label').length; }, 3000);
+    }
+    else if (which !== 'home') handlers.state(STATES[which]);
+    // ?wheel=N: giả lập cuộn chuột N lần trên bàn 3D (âm = phóng to vào) để kiểm tra giới hạn phóng
+    const wheelN = Number(new URLSearchParams(location.search).get('wheel') || 0);
+    if (wheelN) setTimeout(() => {
+      const cv = document.querySelector('.city3d canvas');
+      for (let i = 0; i < Math.abs(wheelN); i++) cv.dispatchEvent(new WheelEvent('wheel', { deltaY: Math.sign(wheelN) * 100, bubbles: true, cancelable: true }));
+      setTimeout(() => {
+        const s = City3D._scene();
+        const p = s.camera.position;
+        const dbg = document.createElement('div');
+        dbg.style.cssText = 'position:fixed;top:0;left:0;z-index:999;background:#000;color:#0f0;font:16px monospace;padding:6px';
+        document.body.appendChild(dbg);
+        dbg.textContent = document.title = `CAM${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)} d=${p.distanceTo(s.controls.target).toFixed(1)} min=${s.controls.minDistance.toFixed(1)} max=${s.controls.maxDistance.toFixed(1)} fog=${s.scene.fog.near.toFixed(0)}-${s.scene.fog.far.toFixed(0)}`;
+      }, 1500);
+    }, 1500);
+    // ?only3d: chỉ hiện khung 3D, phóng to để soi mô hình
+    if (location.search.includes('only3d')) {
+      const st = document.createElement('style');
+      st.textContent = '.topbar,.side,.main > :not(.board3d){display:none!important} .layout{grid-template-columns:1fr!important} .city3d{height:' + (new URLSearchParams(location.search).get('h') || 900) + 'px!important}';
+      document.head.appendChild(st);
+    }
+  </script>
+</body>
+</html>
