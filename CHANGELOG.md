@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Thay đổi — tối ưu điện thoại (iOS Safari / Android Chrome)
+- Chạm lá bài trong quạt: lần 1 nâng lên phóng to để đọc, lần 2 mới xây / chọn; chạm ra ngoài thì hạ bài (trước đây chạm 1 lần là xây ngay). Màn cảm ứng: quạt bài mặc định hạ thấp, chỉ ló giá + tên, không che bàn 3D.
+- Bàn 3D trên màn cảm ứng: vuốt dọc cuộn trang (trước đây bàn chặn cuộn), vuốt ngang xoay bàn, chụm 2 ngón phóng to (`zoomBy()`), chạm vào nhà để xem tên & mô tả.
+- Điện thoại dọc: thanh trên cùng 1 dòng (logo, mã phòng, vòng + nút icon; thừa thì vuốt ngang); thanh điều khiển lượt gọn 1 hàng; bảng chọn nhân vật 3 lá / hàng (thấy đủ 6 lá trong 1 màn).
+- Điện thoại xoay ngang: bố cục riêng (`max-height: 500px`) — thanh nhân vật thấp gọn, quạt bài thu nhỏ 0.68 (`LANDSCAPE_PHONE`), thanh điều khiển lượt nằm góc phải cạnh quạt bài, bàn 3D cao theo màn hình.
+- iOS/Android: `viewport-fit=cover` + vùng an toàn (tai thỏ, thanh home), chiều cao theo `svh/dvh` (thanh địa chỉ Safari), ô nhập 16px (không tự phóng to), tắt kéo-để-tải-lại giữa ván, bỏ viền xanh khi chạm, `touch-action: manipulation`, tiền tố `-webkit-backdrop-filter` (Safari ≤ 17), màu dự phòng khi trình duyệt chưa có `color-mix()`, thẻ meta thêm vào màn hình chính (`theme-color`, `apple-mobile-web-app-*`).
+- Công cụ: `shoot.ps1 -Touch` (giả lập màn cảm ứng); view kiểm tra `touchtap` (tiêu đề `TOUCHTEST true,true,true,true`).
+
 ### Thay đổi — giao diện 3D, ít chữ (docs/design/2026-10-10-giao-dien-3d.md)
 - Bàn 3D thành sân khấu chính: cao gần hết màn hình (`--stage-h`), dải hành động và nút ↺ / 3D nổi trên bàn; bỏ tiêu đề và dòng gợi ý của khung 3D (`renderStage()` thay `renderBoard3d()`).
 - Thanh nhân vật 1→9 thành hàng đồng xu nổi khối trên rãnh gỗ (`.rail` / `.tok`): trạng thái bằng icon (✓ ▶ 💀 ✕ –), dấu nhắm (💀 🦹 🧙 📜 ✉️, phát sáng nếu là thật); sự kiện chi tiết trong tooltip và bảng bật ra khi chạm (`ui.tokInfo`).

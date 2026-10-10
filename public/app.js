@@ -429,16 +429,19 @@ function flyCoins(g) {
 // - lá khác: giữ lá đang trỏ khi chuột còn trong vị trí gốc hoặc vị trí đang nhô của nó.
 // Mỗi lần vẽ lại toàn bộ DOM, lá đang trỏ được gắn lại .hov ngay (không chạy lại hiệu ứng nhô lên).
 const HOV_SEL = '.dcard, .ccard, .choice';
+const LANDSCAPE_PHONE = matchMedia('(max-height: 500px) and (orientation: landscape)');
 const hov = { el: null, key: null, base: null, x: -1, y: -1, raf: 0 };
 const inRect = (r, x, y) => r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
 function fanHit(fan, x) {
   const cards = [...fan.querySelectorAll('.dcard')];
   if (!cards.length) return null;
-  const ox = cards[0].offsetParent ? cards[0].offsetParent.getBoundingClientRect().left + cards[0].offsetParent.clientLeft : 0;
+  // .fan là gốc offset (position: relative); s = tỉ lệ thu nhỏ của quạt (điện thoại xoay ngang)
+  const r = fan.getBoundingClientRect();
+  const s = fan.offsetWidth ? r.width / fan.offsetWidth : 1;
   for (let k = cards.length - 1; k >= 0; k--) {
-    const left = ox + cards[k].offsetLeft;
-    if (x >= left && x <= left + cards[k].offsetWidth) return cards[k];
+    const left = r.left + (fan.clientLeft + cards[k].offsetLeft) * s;
+    if (x >= left && x <= left + cards[k].offsetWidth * s) return cards[k];
   }
   return null;
 }
@@ -482,6 +485,21 @@ document.addEventListener('pointermove', (e) => {
   if (!hov.raf) hov.raf = requestAnimationFrame(updateHov);
 }, { passive: true });
 document.addEventListener('pointerleave', () => { hov.x = hov.y = -1; setHov(null); });
+// Màn cảm ứng không có rê chuột: chạm lá trong quạt bài lần 1 = nâng lên phóng to để đọc, chạm lần 2 = thực hiện
+// (tránh lỡ tay xây khi các lá chồng sát nhau). Chạm ra ngoài quạt = hạ bài xuống.
+let lastPointer = 'mouse';
+document.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, { capture: true, passive: true });
+document.addEventListener('click', (e) => {
+  if (lastPointer === 'mouse') return;
+  const fan = e.target.closest && e.target.closest('.hand-tray .fan');
+  if (!fan) { if (hov.el && hov.el.closest('.fan')) { hov.x = hov.y = -1; setHov(null); } return; }
+  const card = e.target.closest('.dcard') || fanHit(fan, e.clientX);
+  if (!card || hov.el === card) return; // lá đang phóng to → để click đi tiếp (xây / chọn)
+  e.stopImmediatePropagation();
+  e.preventDefault();
+  hov.x = e.clientX; hov.y = e.clientY;
+  setHov(card);
+}, true);
 // Cuộn trang: vị trí gốc đã đổi → đo lại
 window.addEventListener('scroll', () => { if (hov.el) { const el = hov.el; setHov(null); if (hov.x >= 0) updateHov(); else el.classList.remove('hov'); } }, { passive: true, capture: true });
 
@@ -1208,7 +1226,9 @@ function renderHand() {
   const dock = renderDock(g);
   const mainEl = $('.main');
   const trayW = wide ? (mainEl ? mainEl.getBoundingClientRect().width : window.innerWidth - 414) : window.innerWidth;
-  const maxW = Math.min(trayW - (wide && dock ? 330 : 0) - 40, 1000);
+  const zf = LANDSCAPE_PHONE.matches ? 0.68 : 1; // khớp với CSS (.fan scale) khi điện thoại xoay ngang
+  const dockW = dock ? (wide ? 330 : zf < 1 ? 236 : 0) : 0; // thanh điều khiển nằm cạnh quạt bài
+  const maxW = Math.min(trayW - dockW - 40, 1000) / zf;
   const ov = n > 1 ? Math.max(-(cw - 34), Math.min(-22, Math.floor((maxW - cw * n) / (n - 1)))) : 0;
   const mid = (n - 1) / 2;
   const step = Math.min(5, 40 / Math.max(n, 1));
@@ -1918,6 +1938,7 @@ document.addEventListener('keydown', (e) => {
 // Quạt bài phụ thuộc chiều rộng màn hình → vẽ lại khi đổi kích thước
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => S.game && render(), 150); });
+window.addEventListener('orientationchange', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => S.game && render(), 300); });
 
 document.addEventListener('submit', (e) => {
   if (e.target.dataset.form !== 'chat') return;

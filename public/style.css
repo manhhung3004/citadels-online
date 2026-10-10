@@ -129,7 +129,7 @@ input:focus, select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px #e8
 .topbar {
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
   padding: 10px 18px; background: #0d0a07e6; border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 10; backdrop-filter: blur(8px);
+  position: sticky; top: 0; z-index: 10; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .topbar .title { font-family: var(--brand); color: var(--gold); font-size: 20px; display: flex; align-items: center; gap: 8px; }
 .topbar .title .ic { font-size: 26px; }
@@ -542,7 +542,7 @@ input:focus, select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px #e8
 
 /* ---------- Cửa sổ luật chơi ---------- */
 .modal-bg {
-  position: fixed; inset: 0; z-index: 60; background: #000b; backdrop-filter: blur(3px);
+  position: fixed; inset: 0; z-index: 60; background: #000b; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   display: grid; place-items: center; padding: 16px; animation: fadeIn .2s;
 }
 .modal {
@@ -702,7 +702,7 @@ button.primary:active:not(:disabled) { transform: translateY(3px); box-shadow: 0
 /* ---------- Bảng chọn nhân vật bật lên ---------- */
 .picker-bg {
   position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px;
-  background: radial-gradient(ellipse at center, #101626cc, #000d); backdrop-filter: blur(4px); animation: fadeIn .25s;
+  background: radial-gradient(ellipse at center, #101626cc, #000d); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); animation: fadeIn .25s;
 }
 .picker {
   width: min(1000px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; text-align: center;
@@ -1303,7 +1303,7 @@ button.primary:active:not(:disabled) { box-shadow: inset 0 1px 0 #fff8, 0 1px 0 
 .stage-action {
   position: absolute; z-index: 4; top: 18px; left: 18px; max-width: calc(100% - 150px);
   background: #0e1322e0; border: 1px solid #4d5c80; border-radius: 14px;
-  box-shadow: 0 10px 24px #000c, inset 0 1px 0 #ffffff1a; backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px #000c, inset 0 1px 0 #ffffff1a; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
 }
 .stage-tools { position: absolute; z-index: 4; top: 18px; right: 18px; display: flex; gap: 6px; }
 .tool3d { min-width: 38px; height: 34px; padding: 0 10px; font-weight: 700; background: linear-gradient(#2b3653, #1a2134); }
@@ -1363,7 +1363,7 @@ button.primary:active:not(:disabled) { box-shadow: inset 0 1px 0 #fff8, 0 1px 0 
   .tok .medal { width: 40px; height: 40px; }
   .stage { padding: 6px; }
   .stage::after { inset: 6px; }
-  .stage-action { position: relative; top: auto; left: auto; max-width: none; margin-bottom: 6px; backdrop-filter: none; }
+  .stage-action { position: relative; top: auto; left: auto; max-width: none; margin-bottom: 6px; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .stage-tools { top: auto; bottom: 14px; right: 14px; }
   .stage.off .stage-tools { position: static; }
 }
@@ -1408,3 +1408,144 @@ body.scenic #app > .credit { margin-top: auto; }
 /* Dòng tác giả dưới ghi công */
 .credit .made-by { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
 .credit .made-by b { color: var(--gold); font-weight: 700; letter-spacing: .02em; }
+
+/* ======================================================================
+   Điện thoại (iOS Safari / Android Chrome)
+   ====================================================================== */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* Chạm: bỏ viền xanh mặc định, bỏ độ trễ chạm đúp để phóng to */
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [data-act], .dcard, .ccard, .choice, summary { touch-action: manipulation; }
+/* Android: kéo xuống ở đầu trang không tải lại trang giữa ván */
+body { overscroll-behavior-y: none; min-height: 100dvh; }
+/* iOS: thanh địa chỉ co giãn → dùng chiều cao "nhỏ nhất" của màn hình (svh/dvh), vh để dự phòng máy cũ */
+.picker, .modal { max-height: calc(100dvh - 24px); }
+/* iOS: ô nhập chữ < 16px sẽ tự phóng to cả trang khi chạm vào */
+@media (pointer: coarse) { input, select, textarea { font-size: 16px; } }
+
+/* Tai thỏ / thanh home của iPhone (viewport-fit=cover) */
+.topbar { padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+.layout { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+.hand-tray { padding-bottom: env(safe-area-inset-bottom); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+#toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
+@media (min-width: 1021px) {
+  .topbar { padding-left: 18px; padding-right: 18px; }
+  .layout { padding-left: 18px; padding-right: 18px; }
+}
+
+/* Quạt bài: .fan là gốc toạ độ khi chạm (fanHit) */
+.fan { position: relative; }
+/* Màn cảm ứng: bài mặc định hạ thấp (chỉ ló giá + tên) để không che bàn 3D;
+   chạm 1 lá → cả quạt nâng lên, lá đó phóng to; chạm lần nữa mới xây */
+@media (hover: none) {
+  .hand-tray .fan .dcard, .hand-tray .fan:hover:not(:has(.hov)):not(:has(.selected)) .dcard { --drop: 104px; }
+  .hand-tray .fan:has(.hov) .dcard, .hand-tray .fan:has(.selected) .dcard { --drop: 60px; }
+}
+
+/* Bàn 3D trên màn cảm ứng: vuốt dọc = cuộn trang, vuốt ngang = xoay bàn, chụm 2 ngón = phóng to */
+@media (pointer: coarse) { .city3d { touch-action: pan-y; } }
+
+/* ---------- Điện thoại dọc ---------- */
+@media (max-width: 600px) {
+  :root { --stage-h: clamp(300px, 52vh, 560px); --stage-h: clamp(300px, 52svh, 560px); }
+  /* Thanh trên cùng 1 dòng: chỉ logo + mã phòng + vòng; nút chỉ có icon; thừa thì vuốt ngang */
+  .topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar > * { flex: none; }
+  .topbar .title { font-size: 0; gap: 0; }
+  .topbar .title .ic { font-size: 22px; }
+  .topbar button.small { padding: 6px 8px; min-height: 34px; }
+  .topbar .voice-ctl button.small { min-height: 30px; }
+  /* Thanh điều khiển lượt gọn 1 hàng (bước hiện tại đã có trên dải hành động) */
+  .turn-dock { padding: 6px 8px; gap: 6px; }
+  .dk-hint { display: none; }
+  .dk-btns button { padding: 6px 9px; font-size: 12.5px; }
+  .dk-end { padding: 8px 12px; font-size: 13.5px; }
+  .hand-tray .tray-hint { margin-bottom: -46px; padding: 3px 10px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layout { padding-bottom: 210px; }
+  /* Cửa sổ chọn nhân vật: 3 lá / hàng, mô tả nhỏ lại */
+  .picker .ccard { width: calc(33.333% - 8px); padding: 4px 4px 8px; }
+  .picker .chars { gap: 8px 10px; }
+  .picker .ccard .c-art { height: 92px; }
+  .picker .ccard .c-por { top: 16px; width: 60px; height: 60px; }
+  .picker .ccard .cn { font-size: 13px; }
+  .picker .ccard .cd { font-size: 10.5px; line-height: 1.3; padding: 0 2px; }
+  .picker .ccard .c-rank { width: 26px; height: 26px; font-size: 14px; line-height: 22px; left: -5px; top: -5px; }
+}
+@media (max-width: 380px) {
+  .topbar .stat:not(.tb-room):not(:nth-child(3)) { display: none; } /* màn rất hẹp: chỉ giữ mã phòng + vòng */
+  .picker .ccard { width: calc(50% - 8px); }
+}
+
+/* ---------- Điện thoại xoay ngang (màn thấp) ---------- */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root { --stage-h: calc(100vh - 60px); --stage-h: calc(100svh - 60px); }
+  .topbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-top: 4px; padding-bottom: 4px; gap: 8px; }
+  .topbar::-webkit-scrollbar { display: none; }
+  .topbar > * { flex: none; }
+  .topbar .title { font-size: 0; gap: 0; } .topbar .title .ic { font-size: 20px; }
+  .topbar .stat .tb-l, .topbar button .tb-l { display: none; }
+  .topbar button.small { padding: 4px 8px; }
+  .layout { padding-top: 6px; padding-bottom: 150px; gap: 8px; }
+  .main, .side { gap: 8px; }
+  /* Thanh nhân vật thấp gọn */
+  .roundbar { padding: 6px 8px; }
+  .rb-head { margin-bottom: 4px; }
+  .rb-round { font-size: 15px; }
+  .ph { font-size: 12px; padding: 2px 8px 2px 2px; }
+  .ph b { width: 18px; height: 18px; }
+  .rail { padding: 5px; gap: 5px; }
+  .tok { padding: 4px 2px 3px; gap: 1px; border-radius: 10px; }
+  .tok .medal { width: 30px; height: 30px; }
+  .tok .medal .num { width: 14px; height: 14px; font-size: 8.5px; line-height: 12px; }
+  .tok-name { font-size: 10.5px; }
+  .tok-who { font-size: 9.5px; min-height: 11px; line-height: 11px; }
+  .tok-st { font-size: 10px; top: 2px; left: 4px; }
+  .tok.st-cur { transform: translateY(-2px); }
+  /* Ô thông tin của mình 1 hàng */
+  .me-hud { padding: 5px 8px; gap: 6px; }
+  .hud-char .medal { width: 26px; height: 26px; }
+  .hs { padding: 2px 7px; }
+  .hs b { font-size: 14px; }
+  /* Quạt bài thu nhỏ (khớp hệ số 0.68 trong renderHand) */
+  .hand-tray .fan { transform: scale(.68); transform-origin: 50% 100%; margin-top: -48px; }
+  .hand-tray .tray-hint { font-size: 11.5px; padding: 2px 10px; margin-bottom: -34px; }
+  .turn-dock { padding: 5px 8px; gap: 5px; margin-bottom: 2px; }
+  .dk-hint { display: none; }
+  .dk-btns button { padding: 4px 8px; font-size: 12px; }
+  .dk-end { padding: 6px 12px; font-size: 13px; }
+  /* Cửa sổ chọn nhân vật / lượt: lá nhỏ, vừa chiều cao màn hình */
+  .picker { padding: 10px 12px; }
+  .picker-head h2 { font-size: 18px; margin: 0 0 2px; }
+  .picker-head .sub { display: none; }
+  .picker .ccard { width: 128px; }
+  .picker .ccard .c-art { height: 84px; }
+  .picker .ccard .c-por { top: 12px; width: 56px; height: 56px; }
+  .picker .ccard .cd { font-size: 10.5px; }
+  .picker .ccard .cn { font-size: 13px; }
+  .picker-foot { margin-top: 8px; padding-top: 6px; }
+  .tp-head { margin-bottom: 8px; }
+  .tp-head .medal.lg { width: 46px; height: 46px; }
+  .choice { padding: 8px; }
+  .choice .ch-art { width: 48px; height: 48px; font-size: 26px; }
+}
+
+
+/* Chrome Android / Safari cũ chưa có color-mix(): màu dự phòng để huy hiệu & lá bài không bị trong suốt */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .medal { background: radial-gradient(circle at 35% 28%, #ffffff55, transparent 60%), var(--a); }
+  .ccard { background: linear-gradient(165deg, #2a3450, #0c1120 70%); }
+  .dcard { background: linear-gradient(160deg, var(--c), #0c1120 75%); }
+}
+
+/* Điện thoại xoay ngang: thanh điều khiển lượt nằm góc phải dưới, cạnh quạt bài (không che giữa bàn) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .turn-dock {
+    position: absolute; right: max(8px, env(safe-area-inset-right)); bottom: calc(6px + env(safe-area-inset-bottom));
+    width: 220px; margin: 0; flex-direction: column; align-items: stretch;
+  }
+  .turn-dock .dk-btns { justify-content: flex-start; }
+  .turn-dock .dk-end { width: 100%; }
+  .hand-tray.has-dock { padding-right: calc(236px + env(safe-area-inset-right)); }
+  .hand-tray .tray-hint { margin-bottom: -22px; }
+}

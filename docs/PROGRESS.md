@@ -54,6 +54,8 @@ Sửa code server phải khởi động lại server; sửa client thì chỉ c�
 
 20. **Skill bên thứ ba + giao diện 3D ít chữ** (phiên 4) — xem `.claude/skills/THIRD_PARTY.md` và `docs/design/2026-10-10-giao-dien-3d.md`. `renderStage()` (bàn 3D là sân khấu, `--stage-h`), `renderCallOrder()` → `.rail/.tok` + `ui.tokInfo`, `renderMeHud` chỉ icon + số, `City3D.update(g, { label })`, chất lượng 3D thích ứng (`lowEnd`, `measure()`, `kick()`/`busyUntil` → 30 FPS khi đứng yên). Người dùng chưa xem bản này — cần phản hồi (nhật ký vẫn nhiều chữ; có thể rút gọn tiếp).
 
+21. **Tối ưu điện thoại iOS/Android** (phiên 5) — xem mục đầu `[Unreleased]` trong CHANGELOG. Chạm 2 bước cho quạt bài, bàn 3D cho cuộn trang + chụm phóng to, bố cục dọc/ngang, vùng an toàn, svh/dvh, ô nhập 16px. Đã kiểm tra bằng Edge giả lập cảm ứng (`shoot.ps1 -Touch`, view `touchtap`); **chưa thử trên máy thật** — cần người dùng thử iPhone (Safari) và Android (Chrome), nhất là chụm 2 ngón trên bàn 3D và thoại.
+
 ## Điểm cần nhớ khi sửa code
 
 - Mọi hành động: `Game.act()` → thêm cả `botAction` (nếu bot cần) → `renderAction` → case `data-act` trong click handler.

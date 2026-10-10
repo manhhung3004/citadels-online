@@ -10,7 +10,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - `npm test` — mô phỏng 1200 ván toàn bot (2–7 người) để kiểm tra luật; PHẢI pass trước khi merge
 - `BOT_DELAY=5 npm start` — bot chơi siêu nhanh, dùng khi test thủ công / e2e
 - `node scripts/fetch-icons.js` — tải lại icon vào `public/icons.js` (sửa map `ICONS` trong script khi cần thêm icon)
-- `npm run preview` — server xem trước giao diện với trạng thái mẫu (http://localhost:3200/preview.html#turn); chụp ảnh từ Windows bằng `scripts/preview/shoot.ps1` (`-Device 390x844` cho điện thoại, `-Device 1366x768` cho laptop; `-Query "?lang=en"` cho tiếng Anh). Luôn tự chụp & xem ảnh sau khi sửa giao diện, cả màn rộng lẫn điện thoại.
+- `npm run preview` — server xem trước giao diện với trạng thái mẫu (http://localhost:3200/preview.html#turn); chụp ảnh từ Windows bằng `scripts/preview/shoot.ps1` (`-Device 390x844` cho điện thoại, `-Device 1366x768` cho laptop; `-Query "?lang=en"` cho tiếng Anh; `-Touch` giả lập màn cảm ứng như iOS/Android; `-Device 844x390 -Touch` cho điện thoại xoay ngang). Luôn tự chụp & xem ảnh sau khi sửa giao diện, cả màn rộng lẫn điện thoại.
 - Node chạy trong WSL (Ubuntu-24.04); Windows không có Node. Từ PowerShell: `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/game && npm test"`
 
 ## Kiến trúc
@@ -32,6 +32,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - Server-authoritative: client không bao giờ tự quyết định luật; chỉ gửi ý định `{ type, ... }`.
 - Không lộ thông tin bí mật trong `viewFor`: bài trên tay người khác, nhân vật chưa lộ diện, lá úp, bài vừa rút của người khác.
 - Thêm loại hành động mới: thêm vào `Game.act` switch + `botAction` (nếu bot cần) + UI trong `renderAction` + case trong click handler.
+- Điện thoại: không dựa vào rê chuột (`title`, `:hover`) cho thông tin quan trọng; chiều cao dùng `svh/dvh` kèm `vh` dự phòng; phần tử cố định mép màn hình cộng `env(safe-area-inset-*)`. Quạt bài trên màn cảm ứng: chạm 1 = xem, chạm 2 = làm (listener `click` capture trong app.js).
 - Comment ngắn bằng tiếng Việt, theo mật độ hiện có. Không thêm dependency khi chưa cần.
 - Icon từ game-icons.net (CC BY 3.0) — giữ dòng ghi công ở footer.
 
