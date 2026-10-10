@@ -19,7 +19,8 @@ Cloudflare Quick Tunnel (chơi ngay từ máy mình) hoặc Render.com (link c�
 
 1. Nhập tên → **Tạo phòng** → gửi link mời (hoặc mã 4 ký tự) cho bạn bè.
 2. Chủ phòng có thể **thêm bot**, chọn mục tiêu 7 hoặc 8 công trình, **bộ nhân vật** (mặc định ngẫu nhiên mỗi ván: mỗi số rút 1 trong 3 nhân vật; hoặc tự chọn) và **tốc độ bot** (Chậm/Vừa/Nhanh — đổi được cả khi đang chơi), rồi **Bắt đầu**.
-3. Mỗi tab trình duyệt là một người chơi riêng — tải lại trang vẫn giữ chỗ. Người rời phòng giữa ván sẽ được bot chơi thay.
+3. Bấm **Thoại** (phòng chờ hoặc thanh trên cùng) để nói chuyện bằng micro với mọi người trong phòng; phím **M** tắt/bật micro. Cần mở game qua HTTPS hoặc `localhost`.
+4. Mỗi tab trình duyệt là một người chơi riêng — tải lại trang vẫn giữ chỗ. Người rời phòng giữa ván sẽ được bot chơi thay.
 
 ## Luật đã cài đặt (Citadels bản 2016)
 
@@ -47,7 +48,8 @@ Cloudflare Quick Tunnel (chơi ngay từ máy mình) hoặc Render.com (link c�
 
 - `server/game.js` — engine luật chơi (server quyết định mọi thứ, client chỉ thấy thông tin được phép).
 - `server/bot.js` — AI bot đơn giản.
-- `server/index.js` — Express + Socket.IO, quản lý phòng (lưu trong bộ nhớ).
+- `server/index.js` — Express + Socket.IO, quản lý phòng (lưu trong bộ nhớ), chuyển tín hiệu thoại.
+- `public/voice.js` — thoại theo phòng (WebRTC nối trực tiếp, không qua server).
 - `public/` — giao diện (HTML/CSS/JS thuần). Icon từ [game-icons.net](https://game-icons.net) (CC BY 3.0).
 - `test/` — unit test (`node:test`).
 

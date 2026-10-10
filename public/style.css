@@ -1154,3 +1154,38 @@ html[lang="en"] .c3-label.active::before { content: '▶ Playing'; }
 @media (hover: none) and (max-width: 600px) {
   .hand-tray .fan .dcard { --drop: 58px; }
 }
+
+/* ---------- Thoại: nút trên thanh trên cùng / phòng chờ, huy hiệu micro trên avatar ---------- */
+.voice-btn, .v-leave { position: relative; }
+.vi { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+.vi .x { stroke: #ff7a6a; stroke-width: 2.4; }
+.v-leave .vi { fill: #ff7a6a; stroke: none; }
+.voice-btn .vi { color: var(--ok); }
+.voice-ctl { display: inline-flex; align-items: center; gap: 4px; padding: 2px; border-radius: 10px; border: 1px solid #67c27f66; background: #67c27f14; }
+.voice-ctl button.small { padding: 5px 8px; }
+.voice-ctl .v-mic, .voice-ctl .v-deaf { position: relative; }
+.voice-ctl .off { border-color: var(--danger); background: #d9584a2a; color: #ffb3a8; }
+.v-count {
+  display: inline-block; min-width: 18px; height: 18px; margin-left: 5px; padding: 0 5px; border-radius: 99px;
+  background: var(--ok); color: #10200f; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+.avatar .v-badge {
+  position: absolute; left: -5px; bottom: -5px; width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center;
+  line-height: 1; background: #1c2a1e; color: #bff0c9; border: 1.5px solid var(--ok); box-shadow: 0 0 0 2px var(--panel);
+}
+.avatar .v-badge .vi { width: 12px; height: 12px; stroke-width: 2.4; vertical-align: 0; }
+.avatar .v-badge[data-act] { cursor: pointer; }
+.avatar .v-badge[data-act]:hover { transform: scale(1.18); }
+.avatar .v-badge.muted, .avatar .v-badge.silenced { border-color: var(--danger); background: #2e1714; color: #ffb3a8; }
+.avatar .v-badge.wait { border-color: var(--gold); animation: v-wait 1s ease-in-out infinite; }
+.avatar .v-badge.fail { border-color: #6b6b6b; filter: grayscale(1); opacity: .7; }
+@keyframes v-wait { 50% { opacity: .35; } }
+/* Đang nói: vòng sáng xanh nhấp nháy quanh avatar */
+.avatar.speaking { box-shadow: 0 0 0 2px var(--ok), 0 0 12px 3px #67c27fa0; animation: v-speak .7s ease-in-out infinite alternate; }
+@keyframes v-speak { to { box-shadow: 0 0 0 3px var(--ok), 0 0 18px 6px #67c27f70; } }
+@media (prefers-reduced-motion: reduce) { .avatar.speaking, .avatar .v-badge.wait { animation: none; } }
+@media (max-width: 600px) {
+  .voice-ctl button.small { padding: 4px 6px; }
+  .avatar .v-badge { width: 17px; height: 17px; }
+  .avatar .v-badge .vi { width: 11px; height: 11px; }
+}

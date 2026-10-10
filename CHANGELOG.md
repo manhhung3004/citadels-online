@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Thêm — thoại theo phòng (voice chat)
+- Nút **Thoại** ở phòng chờ và thanh trên cùng: vào kênh thoại của phòng, tắt/bật micro (phím **M**), tắt loa, rời thoại; số người đang trong thoại hiện trên nút.
+- Huy hiệu micro trên avatar (phòng chờ, bảng người chơi): xanh = đang trong thoại, đỏ = tắt micro; bấm vào huy hiệu người khác để tắt tiếng riêng họ (chỉ ở máy mình). Viền xanh nhấp nháy quanh avatar người đang nói. Huy hiệu nhấp nháy vàng = đang nối, xám = không nối được.
+- Kỹ thuật: WebRTC nối trực tiếp từng cặp (mesh, tối đa 8 người), Socket.IO chỉ chuyển tín hiệu bắt tay (`voice:join|leave|mute|signal`, `voice:peers`), âm thanh không đi qua server. Người vào sau gửi offer. Tự vào lại thoại khi socket nối lại; tự tắt khi rời phòng / bị mời ra / bot thay chỗ. `members[].voice`: `null | 'on' | 'muted'`.
+- Máy chủ ICE ở `/ice.json`: STUN công khai của Google; TURN tùy chọn qua biến môi trường `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` (xem docs/DEPLOY.md).
+- Cần HTTPS hoặc localhost (quy định của trình duyệt về micro).
+
 ### Thay đổi — giao diện co giãn theo thiết bị
 - Thanh trên cùng bớt chữ dần theo bề rộng (≤1500px: chỉ icon + số; ≤1180px: nút chỉ còn icon, có tooltip); điện thoại ẩn mục tiêu & tốc độ bot, gọn 2 dòng.
 - Laptop màn thấp (≤820px chiều cao): thu gọn thanh gọi nhân vật, bàn 3D 360px, nhật ký theo chiều cao màn hình, ô thông tin & thanh điều khiển gọn hơn.

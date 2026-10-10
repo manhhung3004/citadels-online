@@ -22,6 +22,15 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/vendor/three', express.static(path.join(__dirname, '..', 'node_modules', 'three')));
 // Dữ liệu công trình cho trang luật chơi ở client
 app.get('/cards.json', (req, res) => res.json(cardsData()));
+// Máy chủ ICE cho thoại (WebRTC): STUN công khai; TURN tùy chọn qua biến môi trường (không ghi khóa vào code)
+app.get('/ice.json', (req, res) => {
+  const ice = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.TURN_URLS) {
+    ice.push({ urls: process.env.TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME || '', credential: process.env.TURN_CREDENTIAL || '' });
+  }
+  res.json(ice);
+});
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -44,7 +53,7 @@ function broadcast(room) {
     hostId: room.hostId,
     options: room.options,
     chat: room.chat.slice(-50),
-    members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, online: m.isBot || !!m.socketId })),
+    members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, online: m.isBot || !!m.socketId, voice: m.voice || null })),
     started: !!room.game,
   };
   for (const m of room.members) {
@@ -98,7 +107,7 @@ function botify(room, id) {
   const gp = room.game.players.find((p) => p.id === id);
   if (gp) { gp.isBot = true; room.game.addLog(`${gp.name} rời phòng — **bot chơi thay**`, `${gp.name} left the room — **a bot plays for them**`, 'muted'); }
   const m = room.members.find((x) => x.id === id);
-  if (m) { m.isBot = true; m.socketId = null; m.name = gp ? gp.name : m.name; }
+  if (m) { m.isBot = true; m.socketId = null; m.voice = null; m.name = gp ? gp.name : m.name; }
   playerRoom.delete(id);
   if (room.hostId === id) {
     const h = room.members.find((x) => !x.isBot);
@@ -120,6 +129,7 @@ io.on('connection', (socket) => {
     const room = getRoom();
     if (room && me(room)) {
       me(room).socketId = socket.id;
+      me(room).voice = null; // kết nối mới → client tự vào lại thoại nếu đang bật
       broadcast(room);
     } else socket.emit('state', { you: pid, room: null, game: null });
   });
@@ -239,6 +249,43 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
+  // ---- Thoại: server chỉ chuyển tiếp tín hiệu WebRTC giữa người cùng phòng, âm thanh đi thẳng giữa các trình duyệt ----
+  // voice: null (không tham gia) | 'on' | 'muted'. Người mới vào gửi offer tới từng người đang trong thoại.
+  socket.on('voice:join', () => {
+    const room = getRoom();
+    const m = room && me(room);
+    if (!m || m.isBot || m.socketId !== socket.id) return;
+    m.voice = 'on';
+    socket.emit('voice:peers', room.members.filter((x) => x !== m && x.voice && x.socketId).map((x) => x.id));
+    broadcast(room);
+  });
+
+  socket.on('voice:mute', (muted) => {
+    const room = getRoom();
+    const m = room && me(room);
+    if (!m || !m.voice) return;
+    m.voice = muted ? 'muted' : 'on';
+    broadcast(room);
+  });
+
+  socket.on('voice:leave', () => {
+    const room = getRoom();
+    const m = room && me(room);
+    if (!m || !m.voice) return;
+    m.voice = null;
+    broadcast(room);
+  });
+
+  // data: { sdp } hoặc { candidate } — chỉ chuyển cho người cùng phòng, cả hai đang trong thoại
+  socket.on('voice:signal', ({ to, data } = {}) => {
+    const room = getRoom();
+    const m = room && me(room);
+    const target = room && room.members.find((x) => x.id === to);
+    if (!m || !m.voice || !target || !target.voice || !target.socketId || !data) return;
+    if (JSON.stringify(data).length > 20000) return;
+    io.to(target.socketId).emit('voice:signal', { from: pid, data });
+  });
+
   socket.on('backToLobby', () => {
     const room = getRoom();
     if (!room || room.hostId !== pid || !room.game || room.game.phase !== 'ended') return;
@@ -250,6 +297,7 @@ io.on('connection', (socket) => {
   socket.on('leave', () => {
     const room = getRoom();
     if (!room) return;
+    if (me(room)) me(room).voice = null;
     if (room.game && room.game.phase !== 'ended') botify(room, pid);
     else removeMember(room, pid);
     socket.emit('state', { you: pid, room: null, game: null });
@@ -261,6 +309,7 @@ io.on('connection', (socket) => {
     const m = room && me(room);
     if (m && m.socketId === socket.id) {
       m.socketId = null;
+      m.voice = null;
       broadcast(room);
     }
   });
