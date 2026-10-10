@@ -50,6 +50,24 @@
       Voice.on = true; Voice.peerState = () => 'connected'; Voice.speaking = new Set(['p0']);
       handlers.state(st);
     }
+    else if (which === 'homesum') setTimeout(() => { const d = document.querySelector('.home details'); if (d) d.open = true; }, 1500);
+    else if (which === 'logscroll') {
+      // Kiểm tra nhật ký: giữ chỗ đang xem khi không có sự kiện mới; tự cuộn xuống khi có sự kiện mới
+      handlers.state(STATES.wait);
+      const L = () => document.querySelector('.log');
+      const atBottom = () => L().scrollHeight - L().scrollTop - L().clientHeight < 5;
+      setTimeout(() => {
+        const r = [atBottom()];
+        L().scrollTop = 0;
+        handlers.state(STATES.wait);
+        r.push(L().scrollTop === 0);
+        const st = JSON.parse(JSON.stringify(STATES.wait));
+        const last = st.game.log[st.game.log.length - 1];
+        st.game.log.push({ ...last, id: last.id + 1, text: 'Sự kiện mới', en: 'New event', tone: 'gain' });
+        handlers.state(st);
+        setTimeout(() => { r.push(atBottom()); document.title = 'LOGTEST ' + r.join(','); }, 1500);
+      }, 800);
+    }    else if (which === 'tokinfo') { handlers.state(STATES.wait); ui.tokInfo = 1; render(); }
     else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }
     else if (which === 'dock') { handlers.state(STATES.myturn); ui.turnPopupHidden = true; render(); }
     else if (which === 'logfresh') {
@@ -64,7 +82,7 @@
       setTimeout(() => handlers.state(STATES.wait), 1500);
       setTimeout(() => { document.title = 'LABELS=' + document.querySelectorAll('.c3-label').length; }, 3000);
     }
-    else if (which !== 'home') handlers.state(STATES[which]);
+    else if (!['home', 'homesum', 'logscroll'].includes(which)) handlers.state(STATES[which]);
     // ?wheel=N: giả lập cuộn chuột N lần trên bàn 3D (âm = phóng to vào) để kiểm tra giới hạn phóng
     const wheelN = Number(new URLSearchParams(location.search).get('wheel') || 0);
     if (wheelN) setTimeout(() => {
@@ -82,7 +100,7 @@
     // ?only3d: chỉ hiện khung 3D, phóng to để soi mô hình
     if (location.search.includes('only3d')) {
       const st = document.createElement('style');
-      st.textContent = '.topbar,.side,.main > :not(.board3d){display:none!important} .layout{grid-template-columns:1fr!important} .city3d{height:' + (new URLSearchParams(location.search).get('h') || 900) + 'px!important}';
+      st.textContent = '.topbar,.side,.main > :not(.stage),.stage-action,.stage-tools{display:none!important} .layout{grid-template-columns:1fr!important} .city3d{height:' + (new URLSearchParams(location.search).get('h') || 900) + 'px!important}';
       document.head.appendChild(st);
     }
   </script>
