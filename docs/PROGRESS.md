@@ -52,6 +52,8 @@ Sửa code server phải khởi động lại server; sửa client thì chỉ c�
 
 19. **Thoại theo phòng** (phiên 4) — `public/voice.js` (WebRTC mesh, Socket.IO bắt tay), `server/index.js` (`voice:join|leave|mute|signal`, `voice:peers`, `/ice.json`, `members[].voice`), UI `voiceCtl()` + huy hiệu `voiceBadge()` trên avatar + `updateVoiceDom()`. Đã kiểm tra: Edge headless 2 người với micro giả (`--use-fake-device-for-media-stream`, chạy thật bằng `--remote-debugging-port`, đọc kết quả qua `/json` title) — nối, nghe được, tắt mic, nối lại, rời thoại, rời phòng đều OK; script socket kiểm tra chặn tín hiệu khác phòng/giả danh/gói lớn. Chưa thử: điện thoại thật (iOS Safari), mạng 4G cần TURN.
 
+20. **Skill bên thứ ba + giao diện 3D ít chữ** (phiên 4) — xem `.claude/skills/THIRD_PARTY.md` và `docs/design/2026-10-10-giao-dien-3d.md`. `renderStage()` (bàn 3D là sân khấu, `--stage-h`), `renderCallOrder()` → `.rail/.tok` + `ui.tokInfo`, `renderMeHud` chỉ icon + số, `City3D.update(g, { label })`, chất lượng 3D thích ứng (`lowEnd`, `measure()`, `kick()`/`busyUntil` → 30 FPS khi đứng yên). Người dùng chưa xem bản này — cần phản hồi (nhật ký vẫn nhiều chữ; có thể rút gọn tiếp).
+
 ## Điểm cần nhớ khi sửa code
 
 - Mọi hành động: `Game.act()` → thêm cả `botAction` (nếu bot cần) → `renderAction` → case `data-act` trong click handler.

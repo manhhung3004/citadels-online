@@ -4,6 +4,25 @@
 
 ## [Unreleased]
 
+### Thay đổi — giao diện 3D, ít chữ (docs/design/2026-10-10-giao-dien-3d.md)
+- Bàn 3D thành sân khấu chính: cao gần hết màn hình (`--stage-h`), dải hành động và nút ↺ / 3D nổi trên bàn; bỏ tiêu đề và dòng gợi ý của khung 3D (`renderStage()` thay `renderBoard3d()`).
+- Thanh nhân vật 1→9 thành hàng đồng xu nổi khối trên rãnh gỗ (`.rail` / `.tok`): trạng thái bằng icon (✓ ▶ 💀 ✕ –), dấu nhắm (💀 🦹 🧙 📜 ✉️, phát sáng nếu là thật); sự kiện chi tiết trong tooltip và bảng bật ra khi chạm (`ui.tokInfo`).
+- Thanh vòng: chỉ còn "Chọn › Gọi 1→8", giải thích chuyển vào nút `?`. Thứ tự chọn: ✔ / ✋ / ⏳ thay chữ.
+- Ô thông tin của mình: bỏ mô tả kỹ năng và nhãn chữ (chỉ icon + số), trạng thái rút gọn (⭐ Lượt bạn, ⏳ 2, ✔), câu đầy đủ trong tooltip.
+- Nhãn người chơi trên bàn 3D: icon vàng · bài · công trình + đồng xu nhân vật đã lộ (`opts.label` do app.js dựng).
+- Nhật ký mặc định "Quan trọng", bỏ dòng "Không có thay đổi đáng kể". Bảng người chơi đổi tên "Thành phố", bỏ gợi ý.
+- Chất liệu: panel gỗ có cạnh dày, nút lún khi bấm, huy hiệu đồng xu có vành đồng thau (token `--walnut --oak --brass --slab --wood`).
+- Hiệu năng 3D: điện thoại / màn cảm ứng bắt đầu ở pixel ratio 1.25, bóng 1024, tắt khử răng cưa; đo FPS lúc đầu, máy yếu (< 40 FPS) tự hạ chất lượng; đứng yên thì vẽ 30 khung/giây; nhãn chỉ cập nhật khi nội dung đổi.
+- Xem trước: view `tokinfo`.
+- Đổi tông nền nâu → xanh đêm phối đồng thau (nền tách khỏi lá bài & bàn gỗ; nền cảnh 3D cùng tông). Lá nhân vật trong bảng chọn cao bằng nhau kể cả khi xuống 2 hàng (`equalCards()`).
+- Hình nền trang chủ & phòng chờ: thành phố trung cổ về đêm tự vẽ bằng SVG (trăng, sao lấp lánh, 3 lớp tháp/lâu đài, cửa sổ thắp đèn) — `ensureBackdrop()`, dựng 1 lần ngoài `#app`, ẩn khi đang chơi.
+- Sửa: nhóm nút thoại bị cạnh dày của nút tràn đè lên viền khung.
+- Sửa: trang chủ — dòng ghi công icon luôn ở đáy màn hình; mở "Tóm tắt nhanh" không còn kéo logo/tiêu đề bên trái tụt xuống (2 cột căn mép trên). Xem trước: view `homesum`.
+- Sửa: nhật ký luôn cuộn tới dòng mới nhất khi có sự kiện mới (trước đây chỉ cuộn nếu đang ở sát đáy); không có sự kiện mới thì giữ nguyên chỗ đang xem thay vì nhảy về đầu (`ui.logSeenId`). Xem trước / kiểm tra: view `logscroll` (tiêu đề trang `LOGTEST true,true,true`).
+
+### Thêm — skill cho Claude Code
+- 29 skill bên thứ ba trong `.claude/skills/` (frontend-design, design, ui-ux-pro-max, tailwind-design-system, claude-md-improver, superpowers) + lệnh `/revise-claude-md`; nguồn & giấy phép ở `.claude/skills/THIRD_PARTY.md`.
+
 ### Thêm — thoại theo phòng (voice chat)
 - Nút **Thoại** ở phòng chờ và thanh trên cùng: vào kênh thoại của phòng, tắt/bật micro (phím **M**), tắt loa, rời thoại; số người đang trong thoại hiện trên nút.
 - Huy hiệu micro trên avatar (phòng chờ, bảng người chơi): xanh = đang trong thoại, đỏ = tắt micro; bấm vào huy hiệu người khác để tắt tiếng riêng họ (chỉ ở máy mình). Viền xanh nhấp nháy quanh avatar người đang nói. Huy hiệu nhấp nháy vàng = đang nối, xám = không nối được.

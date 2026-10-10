@@ -32,7 +32,7 @@ let S = { you: null, room: null, game: null };
 const ui = {
   mode: null, selected: new Set(), turnKey: null, connected: false,
   announceKey: null, prevGold: {}, prevCity: null, deltas: {}, logLen: 0,
-  logOpen: {}, logFilter: 'all', rulesOpen: false,
+  logOpen: {}, logFilter: 'key', rulesOpen: false,
   pick: {}, // lựa chọn nhiều bước của kỹ năng (Thẩm phán, Kẻ tống tiền, Gián điệp, Nhà ngoại giao, Thầy phép)
   show3d: (() => { try { return localStorage.getItem('citadels-3d') !== 'off'; } catch (_) { return true; } })(),
   lang: (() => { try { return localStorage.getItem('citadels-lang') === 'en' ? 'en' : 'vi'; } catch (_) { return 'vi'; } })(),
@@ -120,6 +120,89 @@ function rng(seed) { // mulberry32
   let a = seed >>> 0;
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+// ---------- Hình nền trang chủ / phòng chờ: thành phố trung cổ về đêm (tự vẽ SVG, không dùng tranh gốc) ----------
+// Dựng 1 lần, đặt ngoài #app nên không bị vẽ lại (sao / đèn không giật khi phòng chờ cập nhật)
+function skylineLayer(r, { ground, hMin, hMax, scale, fill, lit = 0, W, H }) {
+  let x = -30;
+  let d = '';
+  let win = '';
+  while (x < W + 30) {
+    const w = (38 + r() * 72) * scale;
+    const h = hMin + r() * (hMax - hMin);
+    const top = ground - h;
+    const k = r();
+    d += `M${x.toFixed(0)},${H}V${top.toFixed(0)}`;
+    if (k < 0.32) { // tường thành có lỗ châu mai
+      const n = Math.max(3, Math.round(w / (11 * scale)) | 1);
+      const st = w / n;
+      for (let i = 0; i < n; i++) {
+        const x0 = x + i * st; const x1 = x0 + st; const up = top - 7 * scale;
+        d += i % 2 ? `L${x1.toFixed(1)},${top.toFixed(0)}` : `L${x0.toFixed(1)},${up.toFixed(0)}L${x1.toFixed(1)},${up.toFixed(0)}L${x1.toFixed(1)},${top.toFixed(0)}`;
+      }
+    } else if (k < 0.58) { // tháp mái nhọn, có cờ
+      const tip = top - w * (0.9 + r() * 0.5);
+      d += `L${(x - 4 * scale).toFixed(0)},${top.toFixed(0)}L${(x + w / 2).toFixed(0)},${tip.toFixed(0)}L${(x + w + 4 * scale).toFixed(0)},${top.toFixed(0)}L${(x + w).toFixed(0)},${top.toFixed(0)}`;
+      if (r() < 0.5) d += `M${(x + w / 2).toFixed(0)},${tip.toFixed(0)}v${(-14 * scale).toFixed(0)}l${(12 * scale).toFixed(0)},${(4 * scale).toFixed(0)}l${(-12 * scale).toFixed(0)},${(4 * scale).toFixed(0)}z`;
+    } else if (k < 0.72) { // mái vòm
+      d += `A${(w / 2).toFixed(0)},${(w * 0.42).toFixed(0)} 0 0 1 ${(x + w).toFixed(0)},${top.toFixed(0)}`;
+      d += `M${(x + w / 2 - 1.5 * scale).toFixed(0)},${(top - w * 0.42 + 2).toFixed(0)}v${(-16 * scale).toFixed(0)}h${(3 * scale).toFixed(1)}v${(16 * scale).toFixed(0)}z`;
+    } else if (k < 0.86) { // tháp chuông nhà thờ
+      d += `L${(x + w * 0.38).toFixed(0)},${top.toFixed(0)}L${(x + w * 0.5).toFixed(0)},${(top - h * 0.9).toFixed(0)}L${(x + w * 0.62).toFixed(0)},${top.toFixed(0)}L${(x + w).toFixed(0)},${top.toFixed(0)}`;
+    } else { // nhà mái dốc
+      d += `L${(x + w / 2).toFixed(0)},${(top - w * 0.38).toFixed(0)}L${(x + w).toFixed(0)},${top.toFixed(0)}`;
+    }
+    d += `V${H}Z`;
+    // Cửa sổ thắp đèn
+    if (lit) {
+      const n = Math.floor(r() * 4 * lit);
+      for (let i = 0; i < n; i++) {
+        const wx = x + 6 * scale + r() * Math.max(1, w - 14 * scale);
+        const wy = top + 12 * scale + r() * Math.max(1, h - 30 * scale);
+        const fl = r() < 0.25 ? ` class="fl" style="animation-delay:${(r() * 6).toFixed(1)}s"` : '';
+        win += `<rect x="${wx.toFixed(0)}" y="${wy.toFixed(0)}" width="${(4 * scale).toFixed(1)}" height="${(6 * scale).toFixed(1)}" rx="1"${fl}/>`;
+      }
+    }
+    x += w + r() * 14 * scale;
+  }
+  return `<path d="${d}" fill="${fill}"/>${win ? `<g class="wins">${win}</g>` : ''}`;
+}
+
+function ensureBackdrop() {
+  if (document.getElementById('scene-bg')) return;
+  const W = 1600, H = 900;
+  const r = rng(2016);
+  const stars = Array.from({ length: 170 }, () => {
+    const x = r() * W, y = r() * H * 0.62, rad = 0.3 + r() * r() * 1.6;
+    const tw = r() < 0.22 ? ` class="tw" style="animation-delay:${(r() * 5).toFixed(1)}s"` : '';
+    return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${rad.toFixed(2)}"${tw}/>`;
+  }).join('');
+  const el = document.createElement('div');
+  el.id = 'scene-bg';
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice">
+    <defs>
+      <linearGradient id="bg-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070a14"/><stop offset=".55" stop-color="#111a33"/><stop offset=".82" stop-color="#22305a"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+      <radialGradient id="bg-moon" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff6dc"/><stop offset=".55" stop-color="#ffe7a8"/><stop offset="1" stop-color="#e8b54f"/></radialGradient>
+      <radialGradient id="bg-halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".35"/><stop offset="1" stop-color="#ffe2a0" stop-opacity="0"/></radialGradient>
+      <radialGradient id="bg-glow" cx=".5" cy="1" r=".7"><stop offset="0" stop-color="#e8964f" stop-opacity=".32"/><stop offset="1" stop-color="#e8964f" stop-opacity="0"/></radialGradient>
+      <linearGradient id="bg-mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fa3d6" stop-opacity="0"/><stop offset="1" stop-color="#8fa3d6" stop-opacity=".16"/></linearGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#bg-sky)"/>
+    <g class="stars" fill="#f3ead2">${stars}</g>
+    <circle cx="1290" cy="170" r="150" fill="url(#bg-halo)"/>
+    <circle cx="1290" cy="170" r="44" fill="url(#bg-moon)"/>
+    <circle cx="1276" cy="160" r="8" fill="#e8c77a" opacity=".35"/><circle cx="1302" cy="186" r="5" fill="#e8c77a" opacity=".3"/>
+    <ellipse cx="${W / 2}" cy="${H}" rx="${W * 0.7}" ry="330" fill="url(#bg-glow)"/>
+    ${skylineLayer(r, { ground: 640, hMin: 50, hMax: 190, scale: 0.7, fill: '#1c2a4c', lit: 0.4, W, H })}
+    <rect y="520" width="${W}" height="${H - 520}" fill="url(#bg-mist)"/>
+    ${skylineLayer(r, { ground: 720, hMin: 60, hMax: 220, scale: 0.95, fill: '#111a31', lit: 0.9, W, H })}
+    <rect y="700" width="${W}" height="${H - 700}" fill="#111a31"/>
+    ${skylineLayer(r, { ground: 810, hMin: 40, hMax: 160, scale: 1.25, fill: '#070b16', lit: 1.4, W, H })}
+    <rect y="790" width="${W}" height="${H - 790}" fill="#070b16"/>
+  </svg>`;
+  document.body.prepend(el);
+}
+
 function hillPath(r, base, amp, w = 140, h = 104) {
   const f1 = 0.03 + r() * 0.04; const f2 = 0.08 + r() * 0.06; const p1 = r() * 6; const p2 = r() * 6;
   let d = `M0 ${h}`;
@@ -532,10 +615,16 @@ const waitDots = '<span class="dots"><span></span><span></span><span></span></sp
 function render() {
   const active = document.activeElement;
   const keep = active && active.id ? { id: active.id, val: active.value, pos: active.selectionStart } : null;
+  // Nhật ký: có sự kiện mới → luôn cuộn tới dòng mới nhất; không có → giữ nguyên chỗ đang xem
   const logEl = $('.log');
-  const logAtBottom = !logEl || logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+  const logTop = logEl ? logEl.scrollTop : 0;
+  const g0 = S.game;
+  const logMax = g0 && g0.log.length ? g0.log[g0.log.length - 1].id : null;
+  const logNew = logMax !== ui.logSeenId;
   const shown = new Set([...document.querySelectorAll(`#app :is(${ENTER_SEL})`)].map(enterKey));
 
+  ensureBackdrop();
+  document.body.classList.toggle('scenic', !S.game); // hình nền chỉ ở trang chủ & phòng chờ
   if (!S.room) $('#app').innerHTML = renderHome();
   else if (!S.game) $('#app').innerHTML = renderLobby();
   else $('#app').innerHTML = renderGame();
@@ -545,13 +634,27 @@ function render() {
     if (el) { el.value = keep.val; el.focus(); try { el.setSelectionRange(keep.pos, keep.pos); } catch (_) {} }
   }
   const newLog = $('.log');
-  if (newLog && logAtBottom) newLog.scrollTop = newLog.scrollHeight;
+  if (newLog) {
+    newLog.scrollTop = logTop;
+    // Cuộn tức thì (cuộn mượt sẽ bị lần vẽ lại kế tiếp cắt ngang); dòng mới đã có hiệu ứng sáng lên
+    if (logNew || !logEl) { newLog.scrollTop = newLog.scrollHeight; ui.logSeenId = logMax; }
+  }
   const cl = $('.chatlog');
   if (cl) cl.scrollTop = cl.scrollHeight;
   document.querySelectorAll(`#app :is(${ENTER_SEL})`).forEach((el) => { if (shown.has(enterKey(el))) el.style.animation = 'none'; });
   placeTray();
+  equalCards();
   restoreHov();
   sync3d();
+}
+
+// Lá nhân vật trong bảng chọn cao bằng nhau (mô tả dài ngắn khác nhau, có thể xuống 2 hàng)
+function equalCards() {
+  const cards = [...document.querySelectorAll('.picker .chars > .ccard')];
+  if (!cards.length) return;
+  cards.forEach((c) => { c.style.minHeight = ''; });
+  const h = Math.max(...cards.map((c) => c.offsetHeight));
+  cards.forEach((c) => { c.style.minHeight = `${h}px`; });
 }
 
 // Màn rộng: khay bài (cố định đáy màn hình) khớp đúng bề ngang cột chính để không che cột phải.
@@ -579,6 +682,9 @@ function sync3d() {
   const marks = skillMarks(g);
   City3D.update(g, {
     lang: ui.lang,
+    label: (p, i) => `<div class="c3-n">${p.hasCrown ? `<span class="c3-crown">${icon('king')}</span>` : ''}<b>${esc(p.name)}</b>${i === g.me ? `<em>${tx('bạn', 'you')}</em>` : ''}</div>
+      <div class="c3-s"><span title="${tx('Vàng', 'Gold')}">${icon('gold')}${p.gold}</span><span>${icon('cards')}${p.handCount}</span><span>${icon('city')}${p.citySize ?? p.city.length}/${g.target}</span></div>
+      ${p.chars.length ? `<div class="c3-ch">${p.chars.map((c) => medal(c, 'xs')).join('')}</div>` : ''}`,
     destroyable: marks,
     onDestroy: (target, cardId) => {
       const m = marks.find((x) => x.cardId === cardId);
@@ -595,16 +701,23 @@ function skillTile(act, target, cardId) {
 }
 window.addEventListener('city3d-ready', () => render());
 
-function renderBoard3d() {
+// Sân khấu: bàn 3D chiếm phần lớn cột chính; dải hành động & nút điều khiển nổi bên trên
+function renderStage(g) {
   const supported = !window.City3D || window.City3D.supported;
-  if (!supported) return '';
-  const head = `<div class="board-head"><div class="section-title">${tx('Vương quốc 3D', '3D Kingdom')} <span class="hint">· ${tx('kéo để xoay, cuộn chuột để phóng to', 'drag to rotate, scroll to zoom')}${MODE_HINT[ui.mode] && TILE_MODE[S.game.turn && S.game.turn.key] === ui.mode ? ` · <b style="color:#ff9c8f">${tx(...MODE_HINT[ui.mode])}</b>` : ''}</span></div>
-    ${ui.show3d ? `<button class="small ghost" data-act="reset3d" title="${tx('Đưa camera về góc nhìn ban đầu', 'Reset the camera to the initial view')}">↺ ${tx('Góc nhìn', 'View')}</button>` : ''}
-    <button class="small" data-act="toggle3d">${ui.show3d ? tx('Tắt 3D', '3D off') : tx('Bật 3D', '3D on')}</button></div>`;
-  return `<div class="board3d">${head}${ui.show3d ? '<div id="board-slot"></div>' : ''}</div>`;
+  const live = g.phase !== 'ended';
+  const on = supported && ui.show3d;
+  const action = `<div class="action ${live ? 'slim' : ''} ${on && live ? 'stage-action' : ''}">${renderAction()}</div>`;
+  if (!supported) return action;
+  const tools = `<div class="stage-tools">
+    ${on ? `<button class="small tool3d" data-act="reset3d" title="${tx('Góc nhìn ban đầu · kéo để xoay, cuộn chuột để phóng to', 'Reset view · drag to rotate, scroll to zoom')}" aria-label="${tx('Góc nhìn ban đầu', 'Reset view')}">↺</button>` : ''}
+    <button class="small tool3d" data-act="toggle3d" title="${on ? tx('Tắt bàn 3D', 'Turn the 3D table off') : tx('Bật bàn 3D', 'Turn the 3D table on')}">${on ? '3D ✕' : '3D'}</button></div>`;
+  const modeHint = MODE_HINT[ui.mode] && TILE_MODE[g.turn && g.turn.key] === ui.mode ? `<div class="stage-hint">${tx(...MODE_HINT[ui.mode])}</div>` : '';
+  if (!on) return `${action}<div class="stage off">${tools}</div>`;
+  return `${live ? '' : action}<div class="stage">${live ? action : ''}${tools}${modeHint}<div id="board-slot"></div></div>`;
 }
 
-const credit = () => `<div class="credit">Icon: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC BY 3.0) · Citadels © Bruno Faidutti — ${tx('bản fan làm để chơi cùng bạn bè', 'a fan-made version for playing with friends')}</div>`;
+const credit = () => `<div class="credit">Icon: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC BY 3.0) · Citadels © Bruno Faidutti — ${tx('bản fan làm để chơi cùng bạn bè', 'a fan-made version for playing with friends')}
+  <div class="made-by">Made by <b>hungnm</b></div></div>`;
 
 function renderHome() {
   const code = new URLSearchParams(location.search).get('room') || '';
@@ -789,10 +902,9 @@ function renderGame() {
   <div class="layout">
     <div class="main">
       ${renderRoundBar()}
-      <div class="action ${g.phase !== 'ended' ? 'slim' : ''}">${renderAction()}</div>
       ${g.phase !== 'ended' ? `<div class="main-hud">${renderMeHud(g)}</div>` : ''}
-      ${renderBoard3d()}
-      <div class="players-panel"><div class="section-title">${tx('Người chơi', 'Players')} <span class="hint">· ${tx('theo thứ tự ngồi · rê chuột vào ô công trình để xem chi tiết', 'in seating order · hover a district tile for details')}</span></div>
+      ${renderStage(g)}
+      <div class="players-panel"><div class="section-title">${tx('Thành phố', 'Cities')}</div>
         <div class="players">${g.players.map((p, i) => renderPlayer(p, i)).join('')}</div></div>
     </div>
     <div class="side">
@@ -856,7 +968,7 @@ function renderLog() {
       const cur = last && g.turn && g.turn.rank === T.rank;
       return `<div class="lg-turn ${cur ? 'cur' : ''} ${isFresh(T) ? 'fresh-head' : ''}">
         <div class="lg-th">${medal(T.rank, 'sm')}<b>${chName(T.rank)}</b><span class="muted">· ${esc(p ? p.name : '?')}${T.pi === g.me ? tx(' (bạn)', ' (you)') : ''}</span></div>
-        ${items || `<div class="lg-line t-muted"><span class="lg-ic">•</span><span>${tx('Không có thay đổi đáng kể', 'Nothing notable')}</span></div>`}</div>`;
+        ${items}</div>`;
     }).join('');
     return `<details class="lg-round" data-round="${R.round}" ${open ? 'open' : ''}>
       <summary><span class="lg-r">${tx('Vòng', 'Round')} ${R.round}</span><span class="lg-sum">${sum}</span></summary>
@@ -872,16 +984,17 @@ function renderRoundBar() {
   const g = S.game;
   if (g.phase === 'ended') return '';
   const draft = g.phase === 'draft';
+  const help = draft
+    ? tx('Mỗi người lần lượt chọn bí mật 1 nhân vật. Không ai biết ai cầm nhân vật nào cho tới khi nhân vật đó được gọi.',
+      'Each player in turn secretly picks 1 character. Nobody knows who holds which character until it is called.')
+    : tx('Nhân vật số nhỏ chơi trước. Đến số nào, người cầm nhân vật đó lộ diện và chơi lượt của mình. Chạm vào huy hiệu để xem chi tiết.',
+      'Lower ranks play first. When a rank is called, its holder reveals themselves and plays their turn. Tap a medal for details.');
   const head = `<div class="rb-head">
     <span class="rb-round">${tx('Vòng', 'Round')} ${g.round}</span>
-    <span class="ph ${draft ? 'on' : 'done'}"><b>${draft ? '1' : '✔'}</b> ${tx('Chọn nhân vật', 'Pick characters')}</span>
+    <span class="ph ${draft ? 'on' : 'done'}"><b>${draft ? '1' : '✔'}</b>${tx('Chọn', 'Pick')}</span>
     <span class="ph-arrow">›</span>
-    <span class="ph ${draft ? '' : 'on'}"><b>2</b> ${tx('Gọi nhân vật', 'Call characters')} 1 → ${g.maxRank || 8}</span>
-    <span class="ph-hint">${draft
-      ? tx('Mỗi người lần lượt chọn bí mật 1 nhân vật. 🔒 Không ai biết ai cầm nhân vật nào cho tới khi nhân vật đó được gọi.',
-        'Each player in turn secretly picks 1 character. 🔒 Nobody knows who holds which character until it is called.')
-      : tx('Nhân vật số nhỏ chơi trước. Đến số nào, người cầm nhân vật đó lộ diện và chơi lượt của mình.',
-        'Lower ranks play first. When a rank is called, its holder reveals themselves and plays their turn.')}</span>
+    <span class="ph ${draft ? '' : 'on'}"><b>2</b>${tx('Gọi', 'Call')} 1→${g.maxRank || 8}</span>
+    <span class="rb-help" tabindex="0" title="${esc(help)}" aria-label="${esc(help)}">?</span>
   </div>`;
   return `<div class="roundbar">${head}${draft ? renderPickOrder() : renderCallOrder()}</div>`;
 }
@@ -897,10 +1010,11 @@ function renderPickOrder() {
     const st = k < d.idx ? 'done' : k === d.idx ? 'cur' : 'wait';
     const label = st === 'done' ? tx('✔ Đã chọn', '✔ Picked')
       : st === 'cur' ? (d.awaitingDiscard ? tx('Đang úp bỏ 1 lá…', 'Discarding 1 card…') : tx('Đang chọn…', 'Picking…')) : tx('Chờ lượt', 'Waiting');
-    return `${k ? '<span class="po-arrow">›</span>' : ''}<div class="po ${st}">
+    const ico = st === 'done' ? '✔' : st === 'cur' ? (d.awaitingDiscard ? '🂠' : '✋') : '⏳';
+    return `${k ? '<span class="po-arrow">›</span>' : ''}<div class="po ${st}" title="${esc(label)}">
       ${avatar(p.name, { isBot: p.isBot, id: p.id })}
-      <div><div class="nm">${esc(p.name)}${pi === g.me ? tx(' (bạn)', ' (you)') : ''}${multi ? ` <span class="muted">· ${tx('lần', 'pick')} ${seen[pi]}</span>` : ''}</div>
-      <div class="st">${label}</div></div></div>`;
+      <span class="nm">${esc(p.name)}${pi === g.me ? tx(' (bạn)', ' (you)') : ''}${multi ? ` <span class="muted">×${seen[pi]}</span>` : ''}</span>
+      <span class="po-st">${ico}</span></div>`;
   }).join('')}</div>`;
 }
 
@@ -924,28 +1038,43 @@ function charMarks(g, r) {
   if (g.killed === r) m.push(['dead', tx('💀 Bị ám sát', '💀 Assassinated')]);
   if (g.robbed === r) m.push(['rob', tx('🦹 Bị nhắm trộm', '🦹 Targeted by Thief')]);
   if (g.bewitched === r) m.push(['witch', tx('🧙 Bị yểm bùa', '🧙 Bewitched')]);
-  if (g.warrants && g.warrants.ranks.includes(r)) m.push(['warrant', g.warrants.signed === r ? tx('📜 Lệnh bắt THẬT', '📜 SIGNED warrant') : tx('📜 Lệnh bắt', '📜 Warrant')]);
-  if (g.threats && g.threats.ranks.includes(r)) m.push(['threat', g.threats.real === r ? tx('✉️ Thư đe dọa THẬT', '✉️ REAL threat') : tx('✉️ Thư đe dọa', '✉️ Threat')]);
+  if (g.warrants && g.warrants.ranks.includes(r)) m.push(['warrant', g.warrants.signed === r ? tx('📜 Lệnh bắt THẬT', '📜 SIGNED warrant') : tx('📜 Lệnh bắt', '📜 Warrant'), g.warrants.signed === r]);
+  if (g.threats && g.threats.ranks.includes(r)) m.push(['threat', g.threats.real === r ? tx('✉️ Thư đe dọa THẬT', '✉️ REAL threat') : tx('✉️ Thư đe dọa', '✉️ Threat'), g.threats.real === r]);
   return m;
 }
 
+const TOK_ICON = { done: '✓', cur: '▶', killed: '💀', out: '✕', none: '–', wait: '' };
+// Chi tiết 1 nhân vật trong vòng (tooltip & bảng bật ra khi chạm)
+function tokDetail(g, r) {
+  const s = charStatus(g, r, g.history, true);
+  const marks = s.st === 'wait' || s.st === 'cur' ? charMarks(g, r) : [];
+  return { s, marks, events: s.events || [] };
+}
 function renderCallOrder() {
   const g = S.game;
   const max = g.maxRank || 8;
-  let html = `<div class="call-order" style="--n:${max}">`;
+  if (ui.tokInfo > max) ui.tokInfo = null;
+  let html = `<div class="rail" style="--n:${max}">`;
   for (let r = 1; r <= max; r++) {
-    const s = charStatus(g, r, g.history, true);
-    const marks = s.st === 'wait' || s.st === 'cur' ? charMarks(g, r) : [];
-    const markHtml = marks.map(([k, t]) => `<div class="ev mk mk-${k}">${t}</div>`).join('');
-    const body = s.events
-      ? `${markHtml}${s.events.length ? s.events.map((e) => `<div class="ev">${esc(e)}</div>`).join('') : ''}${s.st === 'cur' ? `<div class="ev now">${waitDots}</div>` : s.events.length ? '' : `<div class="ev muted">${tx('Không làm gì thêm', 'Nothing else')}</div>`}`
-      : `${markHtml || `<div class="ev muted">${s.text}</div>`}`;
-    html += `<div class="node ${s.st}" title="${esc(chDesc(r))}">
-      <div class="n-top">${medal(r, 'sm')}<div><div class="n-name">${chName(r)}</div>
-      <div class="n-who">${s.st === 'cur' ? '▶ ' : ''}${esc(s.who || (s.st === 'wait' ? '?' : ''))}</div></div></div>
-      <div class="n-ev">${body}</div></div>`;
+    const { s, marks, events } = tokDetail(g, r);
+    const tip = [`${chName(r)} — ${chDesc(r)}`, s.who && `👤 ${s.who}`, s.text, ...marks.map((m) => m[1]), ...events.map((e) => `• ${e}`)].filter(Boolean).join('\n');
+    const mk = marks.map(([k, t, real]) => `<span class="tok-mk mk-${k} ${real ? 'real' : ''}">${t.split(' ')[0]}</span>`).join('');
+    const name = CHARS[r] && CHARS[r].unknown ? '?' : chName(r);
+    html += `<button class="tok st-${s.st} ch-${r} ${ui.tokInfo === r ? 'open' : ''}" data-act="tokInfo" data-rank="${r}" title="${esc(tip)}" aria-label="${esc(tip)}">
+      <i class="tok-st">${TOK_ICON[s.st]}</i>${mk ? `<span class="tok-mks">${mk}</span>` : ''}
+      ${medal(r)}<span class="tok-name">${esc(name)}</span>
+      <span class="tok-who">${s.st === 'cur' ? waitDots : esc(s.who || '')}</span></button>`;
   }
-  return html + '</div>';
+  html += '</div>';
+  if (ui.tokInfo) {
+    const r = ui.tokInfo;
+    const { s, marks, events } = tokDetail(g, r);
+    const lines = [...marks.map((m) => m[1]), ...(events.length ? events : [s.text || (s.st === 'cur' ? '…' : tx('Không làm gì thêm', 'Nothing else'))])];
+    html += `<div class="tok-pop ch-${r}">${medal(r, 'sm')}<div class="tp-body"><b>${chName(r)}</b>${s.who ? ` <span class="muted">· ${esc(s.who)}</span>` : ''}
+      <div class="tp-desc">${chDesc(r)}</div>${lines.map((l) => `<div class="tp-ev">${esc(l)}</div>`).join('')}</div>
+      <button class="small ghost" data-act="tokInfo" data-rank="${r}" aria-label="${tx('Đóng', 'Close')}">✕</button></div>`;
+  }
+  return html;
 }
 
 function renderLastRound() {
@@ -1003,35 +1132,36 @@ function renderMeHud(g) {
 
   const chars = me.chars.length ? me.chars.map((r) => {
     // Chỉ cảnh báo khi nhân vật chưa chơi xong
-    const warn = r >= g.currentRank ? charMarks(g, r).map(([, t]) => `<span class="hud-warn">${t}</span>`).join(' ') : '';
-    return `<div class="hud-char ch-${r}">${medal(r)}<div><div class="hc-name">${chName(r)}</div>
-      <div class="hc-desc">${chDesc(r)}</div>${warn}</div></div>`;
-  }).join('') : `<div class="hud-char none"><span class="medal none">?</span><div><div class="hc-name">${tx('Chưa có nhân vật', 'No character yet')}</div>
-      <div class="hc-desc">${g.phase === 'draft' ? tx('Đang trong giai đoạn chọn nhân vật', 'Characters are being picked') : '—'}</div></div></div>`;
+    const warn = r >= g.currentRank ? charMarks(g, r).map(([, t]) => `<span class="hud-warn" title="${esc(t)}">${t.split(' ')[0]}</span>`).join('') : '';
+    return `<div class="hud-char ch-${r}" title="${esc(chDesc(r))}">${medal(r)}<div class="hc-name">${chName(r)}</div>${warn}</div>`;
+  }).join('') : `<div class="hud-char none" title="${g.phase === 'draft' ? tx('Đang trong giai đoạn chọn nhân vật', 'Characters are being picked') : ''}"><span class="medal none">?</span></div>`;
 
   let status = '';
-  if (g.phase === 'draft') status = g.actor === g.me ? tx('⭐ Đến lượt bạn chọn nhân vật', '⭐ Your turn to pick a character') : tx('Đang chọn nhân vật…', 'Picking characters…');
-  else if (t && t.pi === g.me) status = tx('⭐ Đến lượt bạn!', '⭐ Your turn!');
+  // Trạng thái ngắn (icon + số); câu đầy đủ trong tooltip
+  let tip = '';
+  if (g.phase === 'draft') {
+    if (g.actor === g.me) { status = tx('⭐ Chọn nhân vật', '⭐ Pick'); tip = tx('Đến lượt bạn chọn nhân vật', 'Your turn to pick a character'); }
+  } else if (t && t.pi === g.me) { status = tx('⭐ Lượt bạn', '⭐ Your turn'); tip = tx('Đến lượt bạn!', 'Your turn!'); }
   else if (g.phase === 'turns') {
     const next = me.chars.filter((r) => r > g.currentRank && r !== g.killed).sort((a, b) => a - b)[0];
-    if (t && t.bewitched && g.players[t.pi] && me.chars.includes(t.rank)) status = tx('🧙 Nhân vật của bạn đang bị Phù thủy điều khiển', '🧙 Your character is controlled by the Witch');
-    status = status || (next ? tx(`Lượt bạn: số ${next} · đang gọi số ${g.currentRank} (còn ${next - g.currentRank})`, `Your turn: rank ${next} · now calling ${g.currentRank} (${next - g.currentRank} to go)`)
-      : me.chars.length ? tx('✔ Bạn đã chơi xong vòng này', '✔ You are done this round') : '');
+    if (t && t.bewitched && g.players[t.pi] && me.chars.includes(t.rank)) { status = '🧙'; tip = tx('Nhân vật của bạn đang bị Phù thủy điều khiển', 'Your character is controlled by the Witch'); }
+    else if (next) { status = `⏳ ${next - g.currentRank}`; tip = tx(`Lượt bạn: số ${next} · đang gọi số ${g.currentRank} (còn ${next - g.currentRank})`, `Your turn: rank ${next} · now calling ${g.currentRank} (${next - g.currentRank} to go)`); }
+    else if (me.chars.length) { status = '✔'; tip = tx('Bạn đã chơi xong vòng này', 'You are done this round'); }
   }
 
   return `<div class="me-hud ${t && t.pi === g.me ? 'my-turn' : ''}">
     <div class="hud-top">${avatar(me.name, { id: me.id })}<b class="hud-name">${me.hasCrown ? `<span class="crown">${icon('king')}</span>` : ''}${esc(me.name)}</b>
-      ${status ? `<span class="hud-status">${status}</span>` : ''}</div>
+      ${status ? `<span class="hud-status" title="${esc(tip)}">${status}</span>` : ''}</div>
     ${chars}
     <div class="hud-stats">
-      <div class="hs" data-gold="${me.id}" title="${tx('Vàng', 'Gold')}">${icon('gold')}<b>${me.gold}</b><span>${tx('vàng', 'gold')}</span>${d ? `<span class="delta ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</div>
-      <div class="hs" title="${tx('Bài trên tay', 'Cards in hand')}">${icon('cards')}<b>${g.hand.length}</b><span>${tx('lá bài', 'cards')}</span></div>
-      <div class="hs" title="${tx('Công trình', 'Districts')}">${icon('city')}<b>${size}<small>/${g.target}</small></b><span>${tx('công trình', 'districts')}</span></div>
+      <div class="hs" data-gold="${me.id}" title="${tx('Vàng', 'Gold')}">${icon('gold')}<b>${me.gold}</b>${d ? `<span class="delta ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</div>
+      <div class="hs" title="${tx('Bài trên tay', 'Cards in hand')}">${icon('cards')}<b>${g.hand.length}</b></div>
+      <div class="hs" title="${tx('Công trình', 'Districts')}">${icon('city')}<b>${size}<small>/${g.target}</small></b></div>
     </div>
     <div class="hud-progress"><i style="width:${pct}%"></i></div>
     <div class="hud-colors" title="${tx('Có đủ 5 màu công trình: +3 điểm', 'All 5 district colors: +3 points')}">${['yellow', 'blue', 'green', 'red', 'purple'].map((c) =>
       `<span class="hcol c-${c} ${colors.has(c) ? 'on' : ''}" title="${colorName(c)}${colors.has(c) ? ' ✔' : tx(' — chưa có', ' — missing')}"></span>`).join('')}
-      <span class="muted">${colors.size}/5 ${tx('màu', 'colors')}${colors.size === 5 ? tx(' · +3 điểm ✔', ' · +3 points ✔') : ''}</span></div>
+      <span class="muted">${colors.size}/5${colors.size === 5 ? ' · +3 ✔' : ''}</span></div>
   </div>`;
 }
 
@@ -1737,6 +1867,7 @@ document.addEventListener('click', (e) => {
       if (ui.chatOpen) { const i = $('#chatInput'); if (i) i.focus(); }
       return;
     case 'lang': return setLang(ui.lang === 'en' ? 'vi' : 'en');
+    case 'tokInfo': { const r = Number(el.dataset.rank); ui.tokInfo = ui.tokInfo === r ? null : r; return render(); }
     case 'voiceJoin': return voiceJoin();
     case 'voiceMute': return Voice.setMuted(!Voice.muted);
     case 'voiceDeaf': return Voice.setDeaf(!Voice.deaf);

@@ -326,8 +326,10 @@ class CityScene {
   constructor() {
     this.el = document.createElement('div');
     this.el.className = 'city3d';
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Chất lượng thích ứng: điện thoại / màn cảm ứng bắt đầu thấp hơn; máy yếu tự hạ sau khi đo FPS
+    this.lowEnd = matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowEnd, alpha: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lowEnd ? 1.25 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -341,8 +343,8 @@ class CityScene {
     this.el.appendChild(this.tip);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x15100c);
-    this.scene.fog = new THREE.Fog(0x15100c, 30, 70);
+    this.scene.background = new THREE.Color(0x0c1120);
+    this.scene.fog = new THREE.Fog(0x0c1120, 30, 70);
     this.camera = new THREE.PerspectiveCamera(38, 2, 0.1, 200);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -355,7 +357,7 @@ class CityScene {
     const sun = new THREE.DirectionalLight(0xffe2b0, 1.6);
     sun.position.set(10, 18, 8);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(this.lowEnd ? 1024 : 2048, this.lowEnd ? 1024 : 2048);
     sun.shadow.bias = -0.0005;
     this.sun = sun;
     this.scene.add(sun, sun.target);
@@ -391,10 +393,35 @@ class CityScene {
     }, { passive: false });
     canvas.addEventListener('pointerdown', (e) => { this.downAt = [e.clientX, e.clientY]; });
     canvas.addEventListener('pointerup', (e) => this.onClick(e));
-    new ResizeObserver(() => this.resize()).observe(this.el);
+    // Vẽ 60 khung/giây khi có chuyển động (xoay camera, nhà mọc, bụi); đứng yên thì 30 khung/giây
+    this.busyUntil = 0;
+    this.frame = 0;
+    this.controls.addEventListener('change', () => this.kick(400));
+    canvas.addEventListener('pointerdown', () => this.kick(1500));
+    this.fps = { last: 0, time: 0, n: 0, done: false };
+    this.kick(4000); // vẽ liên tục vài giây đầu để đo FPS
+    new ResizeObserver(() => { this.resize(); this.kick(300); }).observe(this.el);
     this.visible = true;
     new IntersectionObserver(([en]) => { this.visible = en.isIntersecting; }).observe(this.el);
     this.loop();
+  }
+
+  kick(ms) { this.busyUntil = Math.max(this.busyUntil, performance.now() + ms); }
+
+  // Đo FPS vài giây đầu khi đang vẽ liên tục; máy yếu → hạ độ phân giải & bóng đổ
+  measure(now) {
+    const f = this.fps;
+    if (f.done) return;
+    if (f.last && now - f.last < 250) { f.time += now - f.last; f.n++; }
+    f.last = now;
+    if (f.time < 3000) return;
+    f.done = true;
+    if ((f.n * 1000) / f.time < 40) {
+      this.renderer.setPixelRatio(1);
+      this.sun.shadow.mapSize.set(1024, 1024);
+      if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+      this.resize();
+    }
   }
 
   resize() {
@@ -486,6 +513,7 @@ class CityScene {
 
   update(view, opts = {}) {
     this.opts = opts;
+    this.kick(1600); // nhà mọc / lún, vương miện bay
     this.layout(view);
     const destroyable = new Map((opts.destroyable || []).map((d) => [d.cardId, d]));
     view.players.forEach((p, i) => {
@@ -512,8 +540,9 @@ class CityScene {
       const active = view.actor === i && view.phase !== 'ended';
       plot.active = active;
       plot.labelEl.className = `c3-label ${active ? 'active' : ''} ${i === view.me ? 'me' : ''}`;
-      plot.labelEl.innerHTML = `${p.hasCrown ? '👑 ' : ''}<b>${esc(p.name)}</b>${i === view.me ? (isEn() ? ' (you)' : ' (bạn)') : ''}
+      const html = opts.label ? opts.label(p, i) : `${p.hasCrown ? '👑 ' : ''}<b>${esc(p.name)}</b>${i === view.me ? (isEn() ? ' (you)' : ' (bạn)') : ''}
         <span>🪙 ${p.gold} · 🏠 ${p.citySize ?? p.city.length}/${view.target}</span>`;
+      if (plot.labelHtml !== html) { plot.labelEl.innerHTML = html; plot.labelHtml = html; }
       if (p.hasCrown) this.crownTarget = plot;
     });
     this.firstFill = false;
@@ -581,7 +610,11 @@ class CityScene {
 
   loop() {
     requestAnimationFrame(() => this.loop());
-    if (!this.visible || document.hidden || !this.el.isConnected) return;
+    if (!this.visible || document.hidden || !this.el.isConnected) { this.fps.last = 0; return; }
+    const now = performance.now();
+    const busy = now < this.busyUntil || this.effects.length > 0;
+    if (!busy && (++this.frame & 1)) return; // đứng yên: bỏ 1/2 khung
+    if (busy) this.measure(now); else this.fps.last = 0;
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
     this.controls.update();
