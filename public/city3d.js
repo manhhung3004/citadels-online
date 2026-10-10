@@ -385,12 +385,20 @@ class CityScene {
       e.preventDefault();
       const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
       const step = Math.max(-120, Math.min(120, px)); // 1 nấc chuột thường ≈ 100px → ~11%
-      const c = this.controls;
-      const off = this.camera.position.clone().sub(c.target);
-      const len = Math.min(c.maxDistance, Math.max(c.minDistance, off.length() * Math.exp(step * 0.0011)));
-      this.camera.position.copy(c.target).add(off.setLength(len));
-      c.update();
+      this.zoomBy(Math.exp(step * 0.0011));
     }, { passive: false });
+    // Điện thoại: chụm / mở 2 ngón để phóng to (OrbitControls tắt zoom vì dùng cuộn chuột tự xử lý ở trên)
+    const touches = new Map();
+    const spread = () => { const p = [...touches.values()]; return p.length === 2 ? Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]) : 0; };
+    canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') touches.set(e.pointerId, [e.clientX, e.clientY]); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!touches.has(e.pointerId)) return;
+      const before = spread();
+      touches.set(e.pointerId, [e.clientX, e.clientY]);
+      const after = spread();
+      if (before && after) this.zoomBy(before / after);
+    });
+    for (const t of ['pointerup', 'pointercancel', 'pointerleave']) canvas.addEventListener(t, (e) => touches.delete(e.pointerId));
     canvas.addEventListener('pointerdown', (e) => { this.downAt = [e.clientX, e.clientY]; });
     canvas.addEventListener('pointerup', (e) => this.onClick(e));
     // Vẽ 60 khung/giây khi có chuyển động (xoay camera, nhà mọc, bụi); đứng yên thì 30 khung/giây
@@ -404,6 +412,16 @@ class CityScene {
     this.visible = true;
     new IntersectionObserver(([en]) => { this.visible = en.isIntersecting; }).observe(this.el);
     this.loop();
+  }
+
+  // Phóng to / thu nhỏ theo tỉ lệ khoảng cách camera, luôn trong giới hạn (không mất bàn)
+  zoomBy(f) {
+    const c = this.controls;
+    const off = this.camera.position.clone().sub(c.target);
+    const len = Math.min(c.maxDistance, Math.max(c.minDistance, off.length() * f));
+    this.camera.position.copy(c.target).add(off.setLength(len));
+    c.update();
+    this.kick(400);
   }
 
   kick(ms) { this.busyUntil = Math.max(this.busyUntil, performance.now() + ms); }
@@ -605,7 +623,13 @@ class CityScene {
     if (!this.downAt || Math.hypot(e.clientX - this.downAt[0], e.clientY - this.downAt[1]) > 5) return; // đang xoay camera
     const o = this.pick(e);
     const d = o && o.userData.destroy;
-    if (d && this.opts.onDestroy) this.opts.onDestroy(d.target, d.cardId);
+    if (d && this.opts.onDestroy) return this.opts.onDestroy(d.target, d.cardId);
+    // Màn cảm ứng không có rê chuột: chạm vào nhà để xem tên & mô tả vài giây
+    if (e.pointerType !== 'mouse') {
+      this.hover(o, e);
+      clearTimeout(this.tipTimer);
+      if (o) this.tipTimer = setTimeout(() => this.hover(null), 2600);
+    }
   }
 
   loop() {

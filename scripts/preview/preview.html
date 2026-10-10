@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Playfair+Display:wght@700;800&family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
@@ -67,6 +67,34 @@
         handlers.state(st);
         setTimeout(() => { r.push(atBottom()); document.title = 'LOGTEST ' + r.join(','); }, 1500);
       }, 800);
+    }    else if (which === 'touchtap') {
+      // Kiểm tra chạm: lần 1 = phóng to xem (không xây), lần 2 = xây; chạm ra ngoài = hạ bài
+      // Bảo đảm có lá xây được (trạng thái mẫu sinh ngẫu nhiên)
+      const ST = JSON.parse(JSON.stringify(STATES.turn));
+      if (ST.game.hand.length && ST.game.costs) ST.game.costs[ST.game.hand[0].id] = { cost: 0, why: null };
+      handlers.state(ST);
+      const sent = [];
+      socket.emit = (...a) => sent.push(a);
+      const tap = (el) => {
+        const r = el.getBoundingClientRect();
+        const o = { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 20 };
+        el.dispatchEvent(new PointerEvent('pointerdown', { ...o, pointerType: 'touch' }));
+        el.dispatchEvent(new MouseEvent('click', o));
+      };
+      setTimeout(() => {
+        const card = document.querySelector('.fan .dcard.playable');
+        if (!card) { document.title = 'TOUCHTEST no-playable-card'; return; }
+        tap(card);
+        const r = [card.classList.contains('hov'), sent.length === 0];
+        tap(card);
+        r.push(sent.length === 1 && sent[0][1] && sent[0][1].type === 'build');
+        handlers.state(ST);
+        const c2 = document.querySelector('.fan .dcard');
+        tap(c2);
+        tap(document.querySelector('.roundbar'));
+        r.push(!document.querySelector('.fan .dcard.hov'));
+        document.title = 'TOUCHTEST ' + r.join(',');
+      }, 800);
     }    else if (which === 'tokinfo') { handlers.state(STATES.wait); ui.tokInfo = 1; render(); }
     else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }
     else if (which === 'dock') { handlers.state(STATES.myturn); ui.turnPopupHidden = true; render(); }
@@ -82,7 +110,7 @@
       setTimeout(() => handlers.state(STATES.wait), 1500);
       setTimeout(() => { document.title = 'LABELS=' + document.querySelectorAll('.c3-label').length; }, 3000);
     }
-    else if (!['home', 'homesum', 'logscroll'].includes(which)) handlers.state(STATES[which]);
+    else if (!['home', 'homesum', 'logscroll', 'touchtap'].includes(which)) handlers.state(STATES[which]);
     // ?wheel=N: giả lập cuộn chuột N lần trên bàn 3D (âm = phóng to vào) để kiểm tra giới hạn phóng
     const wheelN = Number(new URLSearchParams(location.search).get('wheel') || 0);
     if (wheelN) setTimeout(() => {

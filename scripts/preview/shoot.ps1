@@ -3,12 +3,15 @@
 #         .\scripts\preview\shoot.ps1 -Views gallery -Query '?only3d&h=900'   # chỉ khung 3D, phóng to
 # Điện thoại (Edge không cho cửa sổ hẹp hơn ~500px → nhúng iframe qua device.html):
 #         .\scripts\preview\shoot.ps1 -Views turn -Device 390x844      # ảnh: shot-turn-390x844.png
+# Màn cảm ứng (pointer: coarse, hover: none — như iOS/Android): thêm -Touch
+#         .\scripts\preview\shoot.ps1 -Views turn -Device 844x390 -Touch  # điện thoại xoay ngang
 param(
   [string[]]$Views = @('turn'),
   [string]$Size = '1440,1400',
   [string]$Query = '',
   [int]$WaitMs = 5000,
   [string]$Device = '',
+  [switch]$Touch,
   [string]$OutDir = "$env:TEMP\citadels-shots"
 )
 New-Item -ItemType Directory -Force $OutDir | Out-Null
@@ -24,7 +27,9 @@ foreach ($v in $Views) {
     $win = "$([Math]::Max([int]$w, 520)),$h"
     $out = Join-Path $OutDir "shot-$v-$Device.png"
   }
+  $extra = @()
+  if ($Touch) { $extra += '--blink-settings=primaryPointerType=2,availablePointerTypes=2,primaryHoverType=1,availableHoverTypes=1'; $out = $out -replace '\.png$', '-touch.png' }
   if (Test-Path $out) { Remove-Item $out }
-  & $edge --headless=new --disable-gpu --hide-scrollbars "--virtual-time-budget=$WaitMs" "--window-size=$win" "--screenshot=$out" $url 2>$null | Out-Null
+  & $edge --headless=new --disable-gpu --hide-scrollbars @extra "--virtual-time-budget=$WaitMs" "--window-size=$win" "--screenshot=$out" $url 2>$null | Out-Null
   if (Test-Path $out) { "ok   $out" } else { "FAIL $v" }
 }
