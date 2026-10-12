@@ -171,6 +171,10 @@
     chat: (t) => { voice(78, t, { vol: 0.07, attack: 0.008, dur: 0.15, to: 83 }); voice(83, t + 0.09, { vol: 0.06, attack: 0.008, dur: 0.25, to: 86 }); },
     // Bấm nút: tiếng gõ gỗ rất nhẹ
     tick: (t) => { voice(81, t, { vol: 0.03, attack: 0.002, dur: 0.05, to: 74 }); },
+    // 10 giây cuối của lượt mình: tích tắc gỗ
+    clock: (t) => { knock(t, { f: 700, vol: 0.09, dur: 0.06 }); },
+    // Ai đó hết giờ, mất lượt: 2 nốt chuông trầm đi xuống
+    timeout: (t) => { bell(69, t, { vol: 0.07, dur: 0.5, ratio: 2, index: 1 }); bell(62, t + 0.16, { vol: 0.07, dur: 0.9, ratio: 2, index: 1 }); },
   };
   // Tiếng quan trọng: nhạc nền nhỏ đi một chút rồi trở lại
   const DUCK = new Set(['turn', 'finish', 'round', 'crown', 'attack']);

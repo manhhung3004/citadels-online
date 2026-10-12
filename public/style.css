@@ -1622,3 +1622,35 @@ body.tray-peek .hand-tray::before {
 body.tray-peek .hand-tray .fan .dcard { --drop: 60px !important; }
 /* Mở tạm: viên "Bài trên tay" nằm hẳn phía trên quạt (không bị lá đè) để bấm thu lại dễ */
 body.tray-peek .hand-tray .tray-hint { position: relative; z-index: 2; margin-bottom: 8px; }
+
+/* ---------- Đồng hồ lượt (90 giây / bước của người thật; hết giờ → mất lượt) ---------- */
+.lg-line.t-timeout { background: #e8b54f17; color: #f3dca8; }
+.lg-line.t-timeout b { color: var(--gold-hi); }
+.turn-clock {
+  position: fixed; z-index: 57; left: 50%; top: calc(62px + env(safe-area-inset-top)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 5px; border-radius: 999px; pointer-events: auto;
+  background: linear-gradient(#1a2135f2, #10162af2); border: 1px solid #4d5c80; color: var(--text);
+  box-shadow: 0 6px 18px #000a, inset 0 1px 0 #ffffff14; font-size: 13px; white-space: nowrap; cursor: help;
+}
+.turn-clock svg { width: 26px; height: 26px; transform: rotate(-90deg); flex: none; }
+.turn-clock .tc-bg { fill: none; stroke: #ffffff1c; stroke-width: 3; }
+.turn-clock .tc-arc { fill: none; stroke: var(--gold); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .25s linear; }
+.turn-clock .tc-s { font-family: var(--brand); font-size: 15px; color: var(--gold-hi); min-width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.turn-clock .tc-who { color: var(--muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.turn-clock.mine { border-color: var(--gold-dk); }
+.turn-clock.mine .tc-who { color: var(--gold); font-weight: 700; }
+/* 10 giây cuối: đỏ + nhịp sáng (opacity của lớp ::after — không vẽ lại) */
+.turn-clock.urgent { border-color: var(--danger); }
+.turn-clock.urgent .tc-arc { stroke: #ff6a5a; }
+.turn-clock.urgent .tc-s { color: #ff8a7a; }
+.turn-clock.urgent::after {
+  content: ''; position: absolute; inset: -3px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 2px #d9584a88, 0 0 16px #d9584a99; animation: glowFade .9s ease-in-out infinite;
+}
+@media (max-width: 600px) {
+  /* Điện thoại: chỉ vòng + số giây ở góc phải (khung lượt bên dưới đã ghi ai đang chơi) */
+  .turn-clock { top: calc(56px + env(safe-area-inset-top)); left: auto; right: max(10px, env(safe-area-inset-right)); transform: none; font-size: 12px; padding: 3px 9px 3px 3px; gap: 5px; }
+  .turn-clock .tc-who { display: none; }
+  .turn-clock svg { width: 22px; height: 22px; }
+}
+@media (max-height: 500px) and (orientation: landscape) { .turn-clock { top: calc(46px + env(safe-area-inset-top)); } }

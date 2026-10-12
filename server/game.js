@@ -983,6 +983,47 @@ class Game {
     this.closeTurn();
   }
 
+  // Hết giờ (người chơi chờ quá lâu — server gọi theo room.options.turnTime):
+  // - đang chọn nhân vật: chọn / bỏ ngẫu nhiên 1 lá (không thể "bỏ lượt" ở bước này)
+  // - đang trong lượt: mất lượt — không nhận tài nguyên, không thu theo màu, không xây; việc dở dang
+  //   xử lý mặc định để không mất bài / kẹt ván. Trả về false nếu người này không phải người đang phải hành động.
+  timeout(pi) {
+    if (this.phase === 'ended' || this.currentActor() !== pi) return false;
+    const p = this.players[pi];
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    if (this.phase === 'draft') {
+      const discard = this.draft.awaitingDiscard;
+      this.addLog(discard ? `⏳ **${p.name}** hết giờ — bỏ ngẫu nhiên 1 nhân vật` : `⏳ **${p.name}** hết giờ — chọn ngẫu nhiên 1 nhân vật`,
+        discard ? `⏳ **${p.name}** ran out of time — a random character is discarded` : `⏳ **${p.name}** ran out of time — a random character is picked`, 'timeout');
+      this.pick(pi, pick(this.draftOptions()));
+      this.markSeen();
+      return true;
+    }
+    const t = this.turn;
+    this.addLog(`⏳ **${p.name}** hết giờ — mất lượt`, `⏳ **${p.name}** ran out of time — turn lost`, 'timeout');
+    this.note('Hết giờ — mất lượt', 'Out of time — turn lost');
+    // Bài vừa rút đang chờ chọn: giữ các lá đầu (không mất bài)
+    while (t.drawn) this.keepCard(pi, t.drawn[0].id);
+    if (this.turn !== t) return true; // bị yểm bùa: Phù thủy đã tiếp quản
+    // Bị yểm bùa mà chưa nhận tài nguyên: bỏ qua, Phù thủy tiếp quản phần còn lại của lượt
+    if (t.bewitched) { t.actionTaken = true; this.afterResources(); return true; }
+    t.peek = null; // Thầy phép đang xem bài: không lấy lá nào
+    // Nhà tiên tri: trả đủ bài cho từng người (lá ngẫu nhiên)
+    while (t.seerGive && t.seerGive.length) {
+      if (!p.hand.length) { t.seerGive = null; break; }
+      this.seerGive(pi, pick(p.hand).id);
+    }
+    // Thư đe dọa chưa xử lý: coi như từ chối (thư thật → mất vàng)
+    if (t.threat) { t.actionTaken = true; this.resolveThreat(pi, false); }
+    // Hoàng đế bắt buộc trao vương miện: trao ngẫu nhiên, không nhận cống
+    if (t.key === 'emperor' && !t.abilityUsed) {
+      const to = this.emperorTargets(pi);
+      if (to.length) { this.giveCrown(pi, pick(to), false); t.abilityUsed = true; }
+    }
+    this.closeTurn();
+    return true;
+  }
+
   // Hiệu ứng cuối lượt rồi gọi nhân vật tiếp theo
   closeTurn() {
     const t = this.turn;

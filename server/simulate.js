@@ -19,12 +19,13 @@ for (let n = 2; n <= 8; n++) {
     let steps = 0;
     while (g.phase !== 'ended') {
       const pi = g.currentActor();
-      const a = botAction(g, pi);
+      // Thỉnh thoảng giả lập người chơi hết giờ (mất lượt / chọn ngẫu nhiên) ở bất kỳ bước nào trong lượt
+      const a = Math.random() < 0.04 ? { type: 'timeout' } : botAction(g, pi);
       if (!a) throw new Error(`Bot không có hành động (n=${n}, phase=${g.phase}, key=${g.turn && g.turn.key})`);
       const before = gold();
       const logFrom = g.logSeq;
       try {
-        g.act(pi, a);
+        if (a.type === 'timeout') { if (!g.timeout(pi)) throw new Error('timeout() trả về false'); } else g.act(pi, a);
       } catch (e) {
         throw new Error(`Bot hành động sai (${g.turn && g.turn.key}, ${JSON.stringify(a)}): ${e.message}`);
       }

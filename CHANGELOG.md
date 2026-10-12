@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Thêm — giới hạn thời gian: chờ quá 90 giây thì mất lượt
+- Mỗi lượt chơi và mỗi lần chọn / bỏ nhân vật của người thật có **90 giây** (cố định, bot không bị tính giờ). Hết giờ khi đang chọn nhân vật → chọn / bỏ ngẫu nhiên 1 lá; hết giờ trong lượt → **mất lượt**: không nhận tài nguyên, không thu theo màu, không xây (`Game.timeout(pi)`). Việc dở dang được xử lý mặc định để không mất bài, không kẹt ván: giữ lá vừa rút, Nhà tiên tri trả đủ bài, Thầy phép không lấy lá, thư đe dọa coi như từ chối, Hoàng đế trao vương miện ngẫu nhiên (không nhận cống), bị yểm bùa → Phù thủy tiếp quản như thường. Nhật ký ghi "⏳ … hết giờ — mất lượt".
+- Server giữ đồng hồ (`syncTimer` trong `server/index.js`, chỉ đặt lại khi sang bước mới), gửi số ms còn lại (`room.deadlineIn`) — client tự tính theo đồng hồ máy mình nên không lệch giờ. `TURN_TIME` (giây) ghi đè khi test.
+- Viên đồng hồ đếm ngược nổi ở mép trên (vòng tròn + số giây + tên người đang chơi; điện thoại: chỉ vòng + số ở góc phải); 10 giây cuối chuyển đỏ, nhấp sáng, có tiếng tích tắc nếu là lượt mình; ai hết giờ có tiếng chuông trầm. Thêm dòng này vào phần luật.
+- Kiểm tra: 5 unit test mới (`test/characters.test.js`), mô phỏng 1400 ván nay có ~4% bước hết giờ ngẫu nhiên (không mất bài / vàng, ván luôn kết thúc), xem trước view `clock`, `clockurgent`, `clocktest`.
+
 ### Thêm — mở bài trên tay khi khay đang thu gọn
 - Khay bài đang thu gọn (cuộn khỏi bàn 3D): bấm viên "Bài trên tay ▲" → khay trượt lên ngay tại chỗ, không cuộn trang; quạt bài nâng hẳn lên để đọc tên & giá, nền phía sau tối mờ cho dễ nhìn. Bấm viên lần nữa (▼), chạm ra ngoài khay hoặc Esc → thu lại; cuộn về bàn 3D → khay về bình thường, lần sau cuộn đi lại tự thu gọn (`ui.trayOpen`, `body.tray-peek`). Trước đây bấm viên chỉ cuộn trang về bàn. Xem trước: view `traypeek`; kiểm tra: view `traymin`.
 

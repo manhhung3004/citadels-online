@@ -359,6 +359,8 @@ socket.on('disconnect', () => { ui.connected = false; toast(tx('Mất kết nố
 socket.on('errorMsg', (m) => toast(typeof m === 'string' ? m : tx(m.vi, m.en || m.vi)));
 socket.on('state', (s) => {
   S = s;
+  ui.deadline = s.room && s.room.deadlineIn != null ? Date.now() + s.room.deadlineIn : null;
+  ui.turnTime = (s.room && s.room.turnTime) || 90000;
   if (window.Voice) Voice.sync(s.room ? s.room.members : null);
   const g = s.game;
   CHARS = g && g.cast ? castToChars(g.cast) : BASE_CHARS;
@@ -388,6 +390,7 @@ function sfxFor(g) {
   else if (tones.has('attack')) sfx('attack', d);
   else if (tones.has('build')) sfx('build', d);
   else if (tones.has('crown')) sfx('crown', d);
+  else if (tones.has('timeout')) sfx('timeout', d);
   const mine = g.players[g.me] && ui.deltas[g.players[g.me].id];
   if (mine > 0) sfx('coin', 0.05); else if (mine < 0) sfx('coinLoss', 0.05);
 }
@@ -697,6 +700,7 @@ function render() {
   document.querySelectorAll(`#app :is(${ENTER_SEL})`).forEach((el) => { if (shown.has(enterKey(el))) el.style.animation = 'none'; });
   placeTray();
   watchStage();
+  tickClock();
   equalCards();
   restoreHov();
   sync3d();
@@ -1017,10 +1021,43 @@ function renderGame() {
       ${renderLastRound()}
       ${renderMeHud(g)}
     </div>
-  </div>${credit()}${g.phase !== 'ended' ? renderHand() : ''}${renderChatPop()}${renderPicker()}${renderTurnPopup()}`;
+  </div>${credit()}${g.phase !== 'ended' ? renderHand() : ''}${renderChatPop()}${renderPicker()}${renderTurnPopup()}${renderClock()}`;
 }
 
 // ---------- Nhật ký: nhóm theo vòng → theo lượt nhân vật, tô màu theo loại sự kiện ----------
+// ---------- Đồng hồ lượt: mỗi bước của người thật có 90 giây, hết giờ → mất lượt (đang chọn nhân vật: chọn ngẫu nhiên) ----------
+// Viên nổi giữa mép trên; chỉ cập nhật chữ số & vòng tròn mỗi giây (tickClock), không vẽ lại cả trang
+const CLOCK_R = 9;
+const CLOCK_C = 2 * Math.PI * CLOCK_R;
+function renderClock() {
+  const g = S.game;
+  if (!g || !ui.deadline || g.phase === 'ended' || g.actor === null) return '';
+  const mine = g.actor === g.me;
+  const who = mine ? tx('Lượt bạn', 'Your turn') : esc(g.players[g.actor].name);
+  const tip = mine ? tx('Hết giờ sẽ mất lượt (đang chọn nhân vật: chọn ngẫu nhiên)', 'When time runs out you lose your turn (while picking: a random character)')
+    : tx('Thời gian còn lại của người đang chơi', 'Time left for the current player');
+  return `<div class="turn-clock ${mine ? 'mine' : ''}" title="${tip}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="tc-bg" cx="12" cy="12" r="${CLOCK_R}"/><circle class="tc-arc" cx="12" cy="12" r="${CLOCK_R}" stroke-dasharray="${CLOCK_C.toFixed(2)}"/></svg>
+    <b class="tc-s"></b><span class="tc-who">${who}</span></div>`;
+}
+function tickClock() {
+  const el = $('.turn-clock');
+  if (!el || !ui.deadline) return;
+  const ms = Math.max(0, ui.deadline - Date.now());
+  const left = Math.ceil(ms / 1000);
+  const arc = el.querySelector('.tc-arc');
+  arc.style.strokeDashoffset = (CLOCK_C * (1 - ms / ui.turnTime)).toFixed(2);
+  const sEl = el.querySelector('.tc-s');
+  const txt = left >= 60 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : `${left}`;
+  if (sEl.textContent === txt) return;
+  sEl.textContent = txt;
+  const urgent = left <= 10;
+  el.classList.toggle('urgent', urgent);
+  // 10 giây cuối của chính mình: tiếng tích tắc mỗi giây
+  if (urgent && left > 0 && el.classList.contains('mine') && ui.clockTick !== left) { ui.clockTick = left; sfx('clock'); }
+}
+setInterval(tickClock, 250);
+
 const TONE_ICON = { attack: 'crossed', gain: 'gold', build: 'build', crown: 'king', finish: 'trophy' };
 const fmt = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
@@ -1770,6 +1807,7 @@ function renderModal() {
       <ol>
         <li><b>Nhận tài nguyên (bắt buộc):</b> lấy 2 vàng, <i>hoặc</i> rút 2 lá và giữ 1.</li>
         <li><b>Kỹ năng nhân vật (tùy chọn):</b> dùng 1 lần, lúc nào cũng được trong lượt. Thu thuế sẽ tự động nếu bạn quên.</li>
+        <li><b>⏳ 90 giây</b> cho mỗi lượt và mỗi lần chọn nhân vật. Hết giờ: <b>mất lượt</b> (không nhận tài nguyên, không xây); đang chọn nhân vật thì được chọn ngẫu nhiên.</li>
         <li><b>Xây công trình:</b> tối đa 1 (Kiến trúc sư: 3; Nhà tiên tri, Học giả: 2; Nhà hàng hải: 0), trả vàng bằng giá. Không được xây 2 công trình trùng tên.</li>
         <li><b>Kết thúc lượt.</b></li>
       </ol>
@@ -1802,6 +1840,7 @@ function renderModal() {
       <ol>
         <li><b>Gather resources (required):</b> take 2 gold, <i>or</i> draw 2 cards and keep 1.</li>
         <li><b>Character ability (optional):</b> once, at any time during your turn. Taxes are collected automatically if you forget.</li>
+        <li><b>⏳ 90 seconds</b> per turn and per character pick. When time runs out you <b>lose your turn</b> (no resources, no building); while picking, a random character is chosen for you.</li>
         <li><b>Build:</b> up to 1 district (Architect: 3; Seer, Scholar: 2; Navigator: 0), paying its cost. You cannot build two identical districts.</li>
         <li><b>End your turn.</b></li>
       </ol>

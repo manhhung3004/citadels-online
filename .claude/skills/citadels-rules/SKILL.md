@@ -75,3 +75,7 @@ Tổng giá công trình · +3 đủ 5 màu · điểm thưởng công trình t�
 - Kiến trúc sư nhận 2 lá ngay đầu lượt.
 - Bài bỏ/bị phá đặt xuống đáy chồng (không xáo lại).
 - Thông tin công khai trong log: mục tiêu của Sát thủ và Kẻ trộm (theo nhân vật, như khi đọc to ở bàn thật).
+
+## Luật thêm của bản online: giới hạn thời gian
+- Mỗi bước của người thật (1 lần chọn / bỏ nhân vật, 1 lượt chơi) có 90 giây (`TURN_TIME` ghi đè khi test); bot không bị tính giờ.
+- Hết giờ (`Game.timeout(pi)`): đang chọn nhân vật → chọn / bỏ ngẫu nhiên; trong lượt → mất lượt (không tài nguyên, không thu theo màu, không xây). Việc dở dang: giữ lá vừa rút, Tiên tri trả đủ bài, Thầy phép không lấy lá, thư đe dọa coi như từ chối, Hoàng đế trao vương miện ngẫu nhiên không nhận cống, bị yểm bùa → Phù thủy tiếp quản. Hiệu ứng tự động (thưởng Thương gia / Kiến trúc sư, kho thuế, cuối lượt như Nhà tế bần) vẫn diễn ra.
