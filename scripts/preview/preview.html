@@ -134,12 +134,26 @@
     else if (which === 'traymin') {
       // Kiểm tra: cuộn khỏi bàn 3D → khay thu gọn; cuộn lại → mở; tới lượt mình (có thanh điều khiển) → luôn mở
       handlers.state(STATES.wait);
+      // + bấm viên "Bài trên tay" khi thu gọn → mở tạm (tray-peek); bấm lại / chạm ra ngoài → thu; về bàn → hết mở tạm
       const min = () => document.body.classList.contains('tray-min');
+      const peek = () => document.body.classList.contains('tray-peek');
+      const pill = () => document.querySelector('.hand-tray .tray-hint');
       const r = [];
       setTimeout(() => { r.push(!min()); window.scrollTo(0, document.body.scrollHeight); }, 1000);
-      setTimeout(() => { r.push(min()); handlers.state(STATES.turn); }, 2000);
-      setTimeout(() => { r.push(!min()); handlers.state(STATES.wait); window.scrollTo(0, 0); }, 3000);
-      setTimeout(() => { r.push(!min()); document.title = 'TRAYTEST ' + r.join(','); }, 4000);
+      setTimeout(() => { r.push(min()); pill().click(); }, 2000);
+      setTimeout(() => { r.push(peek() && !min()); pill().click(); }, 2400);
+      setTimeout(() => { r.push(min() && !peek()); pill().click(); }, 2800);
+      setTimeout(() => { r.push(peek()); document.querySelector('.layout').click(); }, 3200);
+      setTimeout(() => { r.push(min() && !peek()); pill().click(); }, 3600);
+      setTimeout(() => { r.push(peek()); window.scrollTo(0, 0); }, 4000);
+      setTimeout(() => { r.push(!min() && !peek()); window.scrollTo(0, document.body.scrollHeight); }, 4600);
+      setTimeout(() => { r.push(min() && !peek()); handlers.state(STATES.turn); }, 5200);
+      setTimeout(() => { r.push(!min()); handlers.state(STATES.wait); window.scrollTo(0, 0); }, 6000);
+      setTimeout(() => { r.push(!min()); document.title = 'TRAYTEST ' + r.join(','); }, 7000);
+    }
+    else if (which === 'traypeek') { // ảnh chụp: cuộn khỏi bàn rồi mở tạm khay bài
+      handlers.state(STATES.wait);
+      setTimeout(() => { window.scrollTo(0, document.body.scrollHeight); setTimeout(() => { updateTray(); document.querySelector('.hand-tray .tray-hint').click(); }, 400); }, 900);
     }
     else if (which === 'tokinfo') { handlers.state(STATES.wait); ui.tokInfo = 1; render(); }
     else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }

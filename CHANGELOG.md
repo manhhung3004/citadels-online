@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Thêm — mở bài trên tay khi khay đang thu gọn
+- Khay bài đang thu gọn (cuộn khỏi bàn 3D): bấm viên "Bài trên tay ▲" → khay trượt lên ngay tại chỗ, không cuộn trang; quạt bài nâng hẳn lên để đọc tên & giá, nền phía sau tối mờ cho dễ nhìn. Bấm viên lần nữa (▼), chạm ra ngoài khay hoặc Esc → thu lại; cuộn về bàn 3D → khay về bình thường, lần sau cuộn đi lại tự thu gọn (`ui.trayOpen`, `body.tray-peek`). Trước đây bấm viên chỉ cuộn trang về bàn. Xem trước: view `traypeek`; kiểm tra: view `traymin`.
+
 ## [1.2.0] - 2026-10-12
 
 ### Hiệu năng — mượt hơn, đỡ nóng máy (nhất là điện thoại)

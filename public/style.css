@@ -1602,3 +1602,23 @@ body.tray-dock:not(.scenic) .credit { padding-bottom: 300px; }
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation-iteration-count: 1 !important; animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- Khay thu gọn → bấm viên "Bài trên tay" để mở tạm tại chỗ (body.tray-peek) ---------- */
+/* Mũi tên cho biết bấm sẽ mở (▲) hay thu (▼) */
+body.tray-min .hand-tray .tray-hint::after, body.tray-peek .hand-tray .tray-hint::after {
+  content: ''; display: inline-block; margin-left: 8px; vertical-align: 2px;
+  border: 5px solid transparent; border-bottom: 6px solid var(--gold); border-top: 0;
+}
+body.tray-peek .hand-tray .tray-hint::after { border-bottom: 0; border-top: 6px solid var(--gold); }
+body.tray-peek .hand-tray .tray-hint { cursor: pointer; border-color: var(--gold); }
+/* Lúc mở tạm, sau khay là nội dung trang (không phải bàn 3D) → nền tối mờ dần để lá bài dễ đọc */
+body.tray-peek .hand-tray::before {
+  content: ''; display: block; height: auto; position: absolute; left: 0; right: 0; top: -28px; bottom: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(#070a1400, #070a14eb 28px, #070a14f7);
+  animation: trayShade .3s;
+}
+@keyframes trayShade { from { opacity: 0; } }
+/* Mở tạm: sau khay không có bàn 3D để che → nâng cả quạt bài lên như lúc đang trỏ vào, đọc được giá & tên */
+body.tray-peek .hand-tray .fan .dcard { --drop: 60px !important; }
+/* Mở tạm: viên "Bài trên tay" nằm hẳn phía trên quạt (không bị lá đè) để bấm thu lại dễ */
+body.tray-peek .hand-tray .tray-hint { position: relative; z-index: 2; margin-bottom: 8px; }

@@ -717,8 +717,16 @@ function updateTray() {
     const zone = window.innerHeight - 120; // mép trên vùng quạt bài
     onTable = r.top < zone && r.bottom > zone;
   }
-  document.body.classList.toggle('tray-min', !!S.game && !onTable && !$('.hand-tray.has-dock'));
+  const min = !!S.game && !onTable && !$('.hand-tray.has-dock');
+  if (!min) ui.trayOpen = false; // về lại bàn / tới lượt: bỏ trạng thái "mở tạm" → lần sau cuộn đi lại tự thu gọn
+  // Đang thu gọn mà bấm viên "Bài trên tay" → mở tạm tại chỗ (tray-peek), không cuộn trang
+  document.body.classList.toggle('tray-min', min && !ui.trayOpen);
+  document.body.classList.toggle('tray-peek', min && !!ui.trayOpen);
 }
+const setTrayOpen = (v) => { ui.trayOpen = v; updateTray(); };
+// Đang mở tạm: chạm ra ngoài khay / Esc → thu lại
+document.addEventListener('click', (e) => { if (ui.trayOpen && !e.target.closest('.hand-tray')) setTrayOpen(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.trayOpen) setTrayOpen(false); });
 let trayRaf = 0;
 const trayLater = () => { if (!trayRaf) trayRaf = requestAnimationFrame(() => { trayRaf = 0; updateTray(); }); };
 window.addEventListener('scroll', trayLater, { passive: true });
@@ -1322,7 +1330,7 @@ function renderHand() {
   }).join('');
   // Màn hẹp: ô thông tin nằm trong khay bài (cột phải bị đẩy xuống cuối trang)
   return `<div class="hand-tray ${dock ? 'has-dock' : ''}">${dock}
-    <div class="tray-hint" data-act="trayPeek" title="${tx('Bấm để về bàn chơi', 'Tap to go back to the table')}">${icon('cards')} ${tx('Bài trên tay', 'Cards in hand')}: <b>${n}</b>${hint ? ` · ${hint}` : ''}</div>
+    <div class="tray-hint" data-act="trayPeek" title="${tx('Bấm để xem / thu gọn bài trên tay', 'Tap to show / hide your hand')}">${icon('cards')} ${tx('Bài trên tay', 'Cards in hand')}: <b>${n}</b>${hint ? ` · ${hint}` : ''}</div>
     <div class="fan">${cards || `<span class="tray-empty">${tx('Không có lá nào', 'No cards')}</span>`}</div></div>`;
 }
 
@@ -1974,11 +1982,10 @@ document.addEventListener('click', (e) => {
       if (ui.chatOpen) { const i = $('#chatInput'); if (i) i.focus(); }
       return;
     case 'lang': return setLang(ui.lang === 'en' ? 'vi' : 'en');
-    case 'trayPeek': { // khay đang thu gọn: bấm viên "Bài trên tay" → cuộn về bàn chơi
-      const st = $('.stage');
-      if (document.body.classList.contains('tray-min') && st) st.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    case 'trayPeek': // khay thu gọn: bấm viên "Bài trên tay" → mở bài ra tại chỗ; bấm lần nữa → thu lại
+      if (document.body.classList.contains('tray-min')) setTrayOpen(true);
+      else if (ui.trayOpen) setTrayOpen(false);
       return;
-    }
     case 'tokInfo': { const r = Number(el.dataset.rank); ui.tokInfo = ui.tokInfo === r ? null : r; return render(); }
     case 'voiceJoin': return voiceJoin();
     case 'voiceMute': return Voice.setMuted(!Voice.muted);
