@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Thay đổi — đồng bộ phòng chờ & màn chơi
+- Phòng chờ dùng chung thanh trên cùng với màn chơi (`renderTopbar()`): Luật chơi, Thoại, Trò chuyện, ngôn ngữ, Rời phòng luôn cùng vị trí, cùng kiểu. Bỏ khung chat lớn và khung "Xem luật đầy đủ" ở phòng chờ — chat là nút có số tin chưa đọc + khung bật ra như trong ván.
+- Rời phòng: 1 kiểu duy nhất ở mọi nơi — bấm 2 lần (lần 1 nút chuyển đỏ "Bấm lần nữa để rời", tự trở lại sau 3 giây, `ui.leaveArmed`); bỏ hộp `confirm()` của trình duyệt khi đang chơi (tooltip vẫn báo bot sẽ chơi thay). Nút không còn nằm cạnh "Bắt đầu chơi".
+- Điện thoại: nút Bắt đầu / Thêm bot ở phòng chờ giãn hết chiều ngang. Xem trước: view `lobbyleave`, `lobbychat`.
+- Khay bài trên tay tự thu gọn khi cuộn khỏi bàn 3D (chỉ còn nút "Bài trên tay", chạm để cuộn về bàn), mở lại khi cuộn về; tới lượt mình thì luôn mở (`updateTray()`, `body.tray-min`). Khay không còn che dòng ghi công, bỏ khoảng trống thừa cuối trang. Bàn 3D giữ sẵn chiều cao khi Three.js chưa tải xong (tránh trang nhảy). Xem trước: view `traymin`.
+
 ### Thay đổi — tối ưu điện thoại (iOS Safari / Android Chrome)
 - Chạm lá bài trong quạt: lần 1 nâng lên phóng to để đọc, lần 2 mới xây / chọn; chạm ra ngoài thì hạ bài (trước đây chạm 1 lần là xây ngay). Màn cảm ứng: quạt bài mặc định hạ thấp, chỉ ló giá + tên, không che bàn 3D.
 - Bàn 3D trên màn cảm ứng: vuốt dọc cuộn trang (trước đây bàn chặn cuộn), vuốt ngang xoay bàn, chụm 2 ngón phóng to (`zoomBy()`), chạm vào nhà để xem tên & mô tả.

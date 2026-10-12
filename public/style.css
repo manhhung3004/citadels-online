@@ -1549,3 +1549,32 @@ body { overscroll-behavior-y: none; min-height: 100dvh; }
   .hand-tray.has-dock { padding-right: calc(236px + env(safe-area-inset-right)); }
   .hand-tray .tray-hint { margin-bottom: -22px; }
 }
+/* Rời phòng (thanh trên cùng, phòng chờ & trong ván): bấm 2 lần — lần 1 nút chuyển đỏ */
+.tb-leave.armed, .tb-leave.armed:hover:not(:disabled) { color: #fff; background: #c4402f; border-color: #ff8a7a; box-shadow: 0 0 0 3px #c4402f44, 0 3px 0 var(--oak-dk); animation: pop .25s; }
+/* Phòng chờ dùng chung thanh trên cùng với màn chơi */
+.lobby { padding-top: 3vh; }
+.lobby-actions { justify-content: flex-end; margin-top: 18px; }
+@media (max-width: 600px) {
+  .lobby-actions { flex-direction: column-reverse; align-items: stretch; }
+  .lobby-actions > .row { flex-direction: column-reverse; align-items: stretch; }
+  .lobby-actions button { width: 100%; }
+}
+/* ---------- Khay bài thu gọn khi cuộn khỏi bàn 3D (body.tray-min do watchStage() bật) ---------- */
+.hand-tray { transition: translate .38s cubic-bezier(.2, .8, .3, 1); }
+/* Trượt cả khay xuống, chỉ chừa viên "Bài trên tay" ở đáy */
+body.tray-min .hand-tray { translate: 0 calc(100% - 46px - env(safe-area-inset-bottom)); }
+body.tray-min .hand-tray .fan { opacity: 0; pointer-events: none; transition: opacity .2s; }
+body.tray-min .hand-tray .tray-hint { cursor: pointer; border-color: var(--gold-dk); }
+body.tray-min .hand-tray .tray-hint:hover { color: var(--gold-hi); border-color: var(--gold); }
+/* Không còn khoảng trống thừa cuối trang: chỗ cho khay bài nằm dưới dòng ghi công (không bị khay đè chữ) */
+body:not(.scenic) .layout { padding-bottom: 12px; }
+body:not(.scenic) .credit { padding-bottom: 150px; }
+body.tray-dock:not(.scenic) .credit { padding-bottom: 300px; }
+@media (max-width: 1020px) { body.tray-dock:not(.scenic) .credit { padding-bottom: 270px; } }
+@media (max-height: 500px) and (orientation: landscape) {
+  body:not(.scenic) .credit { padding-bottom: 110px; }
+  body.tray-dock:not(.scenic) .credit { padding-bottom: 150px; }
+}
+@media (prefers-reduced-motion: reduce) { .hand-tray { transition: none; } }
+/* Giữ sẵn chỗ cho bàn 3D trước khi Three.js tải xong (không giật bố cục, khay bài đo đúng vị trí bàn) */
+.stage #board-slot { min-height: var(--stage-h); }
