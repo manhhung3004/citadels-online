@@ -116,6 +116,29 @@
         mb().click(); r.push(Sfx.musicPlaying);
       } catch (e) { r.push('err:' + e.message); } document.title = 'SFXTEST ' + r.join(','); }, 800);
     }
+    else if (which === 'clock' || which === 'clockurgent' || which === 'clocktest') {
+      // Đồng hồ lượt: người khác đang chơi (còn 45s) / lượt mình còn 7s (đỏ, tích tắc)
+      const mine = which !== 'clock';
+      const st = JSON.parse(JSON.stringify(mine ? STATES.turn : STATES.wait));
+      st.room.deadlineIn = mine ? 7000 : 45000;
+      st.room.turnTime = 90000;
+      handlers.state(st);
+      if (which === 'clocktest') {
+        const r = [];
+        const el = () => document.querySelector('.turn-clock');
+        setTimeout(() => {
+          r.push(!!el() && el().classList.contains('mine') && el().classList.contains('urgent'));
+          r.push(['6', '7'].includes(el().querySelector('.tc-s').textContent));
+          const st2 = JSON.parse(JSON.stringify(STATES.wait)); st2.room.deadlineIn = 75000; st2.room.turnTime = 90000;
+          handlers.state(st2);
+          r.push(!el().classList.contains('mine') && !el().classList.contains('urgent') && el().querySelector('.tc-s').textContent === '1:15');
+          const st3 = JSON.parse(JSON.stringify(STATES.wait)); st3.room.deadlineIn = null;
+          handlers.state(st3);
+          r.push(!el());
+          document.title = 'CLOCKTEST ' + r.join(',');
+        }, 900);
+      }
+    }
     else if (which === 'perf') {
       // Đo bàn 3D: số khung/giây khi đứng yên, và khi giao diện vẽ lại mà bàn không đổi (không được vẽ dồn)
       handlers.state(STATES.wait);

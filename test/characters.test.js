@@ -380,3 +380,69 @@ test('song ngữ: mọi dòng nhật ký có bản tiếng Anh, tóm tắt lư�
   const g = makeGame(4);
   try { g.act(0, { type: 'nope' }); assert.fail('phải báo lỗi'); } catch (e) { assert.equal(e.en, 'Invalid action'); }
 });
+
+// ---------- Hết giờ (server gọi g.timeout(pi) sau 90 giây) ----------
+test('hết giờ khi chọn nhân vật: chọn ngẫu nhiên 1 lá hợp lệ; người khác gọi thì không có tác dụng', () => {
+  const g = makeGame(4);
+  const pi = g.currentActor();
+  const opts = g.draftOptions();
+  assert.equal(g.timeout((pi + 1) % 4), false);
+  assert.equal(g.timeout(pi), true);
+  assert.equal(g.players[pi].chars.length, 1);
+  assert.ok(opts.includes(g.players[pi].chars[0]));
+  assert.notEqual(g.currentActor(), pi);
+  assert.match(g.log.at(-1).text, /hết giờ/);
+});
+
+test('hết giờ trong lượt: mất lượt — không nhận tài nguyên, không thu theo màu, sang nhân vật tiếp theo', () => {
+  const g = makeGame(4);
+  startTurns(g, { 6: 0, 7: 1 });
+  g.players[0].city = [card(1, 'market', 2, 'green')];
+  assert.equal(g.timeout(0), true);
+  assert.equal(g.players[0].gold, 1); // chỉ +1 thưởng Thương gia (tự động đầu lượt), không +2 vàng, không thu màu xanh lá
+  assert.equal(g.turn.rank, 7);
+  assert.equal(g.turn.pi, 1);
+});
+
+test('hết giờ khi đang chọn lá vừa rút: tự giữ lá, không mất bài', () => {
+  const g = makeGame(4);
+  startTurns(g, { 5: 0 });
+  const total = () => g.deck.length + g.players.reduce((s, p) => s + p.hand.length, 0) + (g.turn && g.turn.drawn ? g.turn.drawn.length : 0);
+  const before = total();
+  g.act(0, { type: 'drawCards' });
+  assert.ok(g.turn.drawn);
+  g.timeout(0);
+  assert.equal(g.players[0].hand.length, 1);
+  assert.equal(total(), before);
+});
+
+test('hết giờ: Hoàng đế vẫn trao vương miện (ngẫu nhiên, không nhận cống); Nhà tiên tri trả đủ bài', () => {
+  const g = makeGame(4, { 4: 'emperor' });
+  startTurns(g, { 4: 0 });
+  const targets = g.emperorTargets(0);
+  g.players.forEach((p) => { p.gold = 3; });
+  g.timeout(0);
+  assert.ok(targets.includes(g.crown));
+  assert.equal(g.players[0].gold, 3);
+
+  const s = makeGame(4, { 3: 'seer' });
+  startTurns(s, { 3: 0 });
+  s.players.forEach((p, i) => { p.hand = i ? [card(10 + i, 'tavern', 1, 'green'), card(20 + i, 'market', 2, 'green')] : []; });
+  s.act(0, { type: 'takeGold' });
+  s.act(0, { type: 'ability' });
+  assert.equal(s.players[0].hand.length, 3);
+  s.timeout(0);
+  assert.deepEqual(s.players.map((p) => p.hand.length), [0, 2, 2, 2]);
+});
+
+test('hết giờ khi bị yểm bùa: chủ lá không nhận gì, Phù thủy tiếp quản lượt', () => {
+  const g = makeGame(4, { 1: 'witch' });
+  startTurns(g, { 1: 0, 6: 1 });
+  g.act(0, { type: 'takeGold' });
+  g.act(0, { type: 'ability', target: 6 });
+  assert.equal(g.turn.pi, 1);
+  g.timeout(1);
+  assert.equal(g.players[1].gold, 0);
+  assert.equal(g.turn.pi, 0); // Phù thủy chơi tiếp, được thưởng Thương gia
+  assert.equal(g.turn.rank, 6);
+});

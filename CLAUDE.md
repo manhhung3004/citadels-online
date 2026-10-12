@@ -8,7 +8,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 
 - `npm start` — chạy server tại http://localhost:3000 (`PORT=3001 npm start` để đổi cổng)
 - `npm test` — mô phỏng 1200 ván toàn bot (2–7 người) để kiểm tra luật; PHẢI pass trước khi merge
-- `BOT_DELAY=5 npm start` — bot chơi siêu nhanh, dùng khi test thủ công / e2e
+- `BOT_DELAY=5 npm start` — bot chơi siêu nhanh, dùng khi test thủ công / e2e; `TURN_TIME=5` — giới hạn mỗi lượt 5 giây thay vì 90 (test hết giờ)
 - `node scripts/fetch-icons.js` — tải lại icon vào `public/icons.js` (sửa map `ICONS` trong script khi cần thêm icon)
 - `npm run preview` — server xem trước giao diện với trạng thái mẫu (http://localhost:3200/preview.html#turn); chụp ảnh từ Windows bằng `scripts/preview/shoot.ps1` (`-Device 390x844` cho điện thoại, `-Device 1366x768` cho laptop; `-Query "?lang=en"` cho tiếng Anh; `-Touch` giả lập màn cảm ứng như iOS/Android; `-Device 844x390 -Touch` cho điện thoại xoay ngang). Luôn tự chụp & xem ảnh sau khi sửa giao diện, cả màn rộng lẫn điện thoại.
 - Node chạy trong WSL (Ubuntu-24.04); Windows không có Node. Từ PowerShell: `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/game && npm test"`
@@ -18,7 +18,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - `server/game.js` — engine luật chơi, class `Game`. **Nguồn sự thật duy nhất.** Mọi hành động đi qua `act(playerIndex, action)`; lỗi luật ném `GameError` (thông điệp tiếng Việt, hiện cho người chơi). `viewFor(playerId)` trả trạng thái đã ẩn thông tin bí mật.
 - `server/cards.js` — dữ liệu nhân vật & công trình (key, tên, giá, màu, mô tả).
 - `server/bot.js` — `botAction(game, pi)` trả 1 hành động hợp lệ hoặc null. Mọi hành động bot phải hợp lệ với engine.
-- `server/index.js` — phòng chơi (in-memory `rooms`), sự kiện socket, lập lịch bot theo `room.options.botSpeed`.
+- `server/index.js` — phòng chơi (in-memory `rooms`), sự kiện socket, lập lịch bot theo `room.options.botSpeed`. Đồng hồ lượt: `syncTimer()` (gọi trong `broadcast`) đặt 90 giây cho mỗi bước của người thật, hết giờ gọi `Game.timeout(pi)` (chọn nhân vật ngẫu nhiên / mất lượt, xử lý mặc định việc dở dang); client nhận `room.deadlineIn` và vẽ `renderClock()` / `tickClock()`.
 - `server/simulate.js` — test bất biến: không mất bài, không âm vàng, game luôn kết thúc.
 - `public/app.js` — client: nhận `state`, vẽ lại toàn bộ bằng template string, sự kiện qua `data-act`. `public/style.css` — theme tối trung cổ, token màu ở `:root`. `public/icons.js` — sinh tự động, không sửa tay.
 - `public/voice.js` — thoại theo phòng (`window.Voice`): WebRTC mesh, người vào sau gửi offer; server chỉ chuyển `voice:signal` giữa người cùng phòng đang trong thoại, trạng thái ở `members[].voice` (`null|'on'|'muted'`). Viền "đang nói" cập nhật bằng `updateVoiceDom()` (không vẽ lại cả trang). TURN tùy chọn qua env `TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL` → `/ice.json`. Preview: view `voice`, `voicelobby`.

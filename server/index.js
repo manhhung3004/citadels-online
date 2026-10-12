@@ -11,6 +11,9 @@ const PORT = process.env.PORT || 3000;
 // Thời gian bot "suy nghĩ" (ms) theo tốc độ phòng; BOT_DELAY ghi đè (dùng khi test)
 const BOT_SPEEDS = { slow: 2600, normal: 1700, fast: 900 };
 const BOT_DELAY = Number(process.env.BOT_DELAY) || 0;
+// Mỗi lượt / mỗi lần chọn nhân vật của người thật có 90 giây; hết giờ → mất lượt (chọn ngẫu nhiên khi đang chọn nhân vật).
+// TURN_TIME (giây) ghi đè khi test
+const TURN_TIME = (Number(process.env.TURN_TIME) || 90) * 1000;
 const BOT_NAMES = ['Bot Arthur', 'Bot Merlin', 'Bot Elena', 'Bot Robin', 'Bot Isabel', 'Bot Edmund', 'Bot Grace', 'Bot Percival'];
 // Số người tối đa: 8 khi có nhân vật số 9, ngược lại 7
 // (chế độ ngẫu nhiên: 8 — bộ rút ra sẽ có số 9 khi đủ 8 người)
@@ -48,6 +51,7 @@ function newCode() {
 const cleanName = (s) => String(s || '').trim().slice(0, 20) || 'Người chơi';
 
 function broadcast(room) {
+  syncTimer(room);
   const pub = {
     code: room.code,
     hostId: room.hostId,
@@ -55,6 +59,8 @@ function broadcast(room) {
     chat: room.chat.slice(-50),
     members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, online: m.isBot || !!m.socketId, voice: m.voice || null })),
     started: !!room.game,
+    turnTime: TURN_TIME,
+    deadlineIn: room.deadlineAt ? Math.max(0, room.deadlineAt - Date.now()) : null,
   };
   for (const m of room.members) {
     if (!m.socketId) continue;
@@ -91,11 +97,40 @@ function scheduleBots(room) {
   }, botDelay(room, g));
 }
 
+// ---- Hết giờ: mỗi bước của người thật (1 lần chọn / bỏ nhân vật, 1 lượt chơi) có TURN_TIME ----
+// Đồng hồ chỉ đặt lại khi người phải hành động / bước thay đổi (khóa stepKey), không đặt lại mỗi lần gửi trạng thái.
+function stepKey(g) {
+  if (g.phase === 'draft') return `d${g.round}-${g.draft.idx}-${g.draft.awaitingDiscard}`;
+  return `t${g.round}-${g.currentRank}-${g.turn ? g.turn.pi : ''}`;
+}
+function syncTimer(room) {
+  const g = room.game;
+  const pi = g && g.phase !== 'ended' ? g.currentActor() : null;
+  if (pi === null || g.players[pi].isBot) { stopTimer(room); return; }
+  const key = stepKey(g);
+  if (room.timerKey === key) return;
+  clearTimeout(room.turnTimer);
+  room.timerKey = key;
+  room.deadlineAt = Date.now() + TURN_TIME;
+  room.turnTimer = setTimeout(() => {
+    if (room.game !== g || room.timerKey !== key) return;
+    try { g.timeout(pi); } catch (e) { console.error('Hết giờ lỗi:', e); }
+    broadcast(room);
+    scheduleBots(room);
+  }, TURN_TIME);
+}
+function stopTimer(room) {
+  clearTimeout(room.turnTimer);
+  room.timerKey = null;
+  room.deadlineAt = null;
+}
+
 function removeMember(room, id) {
   room.members = room.members.filter((m) => m.id !== id);
   playerRoom.delete(id);
   if (!room.members.some((m) => !m.isBot)) {
     clearTimeout(room.botTimer);
+    stopTimer(room);
     rooms.delete(room.code);
     return;
   }
@@ -113,7 +148,7 @@ function botify(room, id) {
     const h = room.members.find((x) => !x.isBot);
     if (h) room.hostId = h.id;
   }
-  if (!room.members.some((x) => !x.isBot)) { clearTimeout(room.botTimer); rooms.delete(room.code); return; }
+  if (!room.members.some((x) => !x.isBot)) { clearTimeout(room.botTimer); stopTimer(room); rooms.delete(room.code); return; }
   scheduleBots(room);
 }
 
@@ -291,6 +326,7 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== pid || !room.game || room.game.phase !== 'ended') return;
     clearTimeout(room.botTimer);
     room.game = null;
+    stopTimer(room);
     broadcast(room);
   });
 
