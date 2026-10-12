@@ -116,6 +116,21 @@
         mb().click(); r.push(Sfx.musicPlaying);
       } catch (e) { r.push('err:' + e.message); } document.title = 'SFXTEST ' + r.join(','); }, 800);
     }
+    else if (which === 'perf') {
+      // Đo bàn 3D: số khung/giây khi đứng yên, và khi giao diện vẽ lại mà bàn không đổi (không được vẽ dồn)
+      handlers.state(STATES.wait);
+      const frames = () => { const s = City3D._scene && City3D._scene(); return s ? s.renderer.info.render.frame : 0; };
+      const r = [];
+      setTimeout(() => {
+        const f0 = frames();
+        setTimeout(() => {
+          r.push('idle=' + ((frames() - f0) / 2).toFixed(0));
+          const f1 = frames();
+          const iv = setInterval(() => render(), 250); // vẽ lại giao diện 4 lần/giây, bàn không đổi
+          setTimeout(() => { clearInterval(iv); r.push('rerender=' + ((frames() - f1) / 2).toFixed(0)); document.title = 'PERFTEST ' + r.join(','); }, 2000);
+        }, 2000);
+      }, 7000);
+    }
     else if (which === 'traymin') {
       // Kiểm tra: cuộn khỏi bàn 3D → khay thu gọn; cuộn lại → mở; tới lượt mình (có thanh điều khiển) → luôn mở
       handlers.state(STATES.wait);
