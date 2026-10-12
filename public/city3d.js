@@ -312,7 +312,7 @@ function makeCrown() {
     const gem = new THREE.Mesh(G.sphere, M.glow(i % 2 ? 0xff4a5a : 0x4ab0ff));
     gem.scale.setScalar(0.09); gem.position.set(Math.sin(a) * 0.45, 0, Math.cos(a) * 0.45); g.add(gem);
   }
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  // Không đổ bóng: vương miện xoay liên tục, có bóng thì phải tính lại bóng mỗi khung
   return g;
 }
 
@@ -328,10 +328,14 @@ class CityScene {
     this.el.className = 'city3d';
     // Chất lượng thích ứng: điện thoại / màn cảm ứng bắt đầu thấp hơn; máy yếu tự hạ sau khi đo FPS
     this.lowEnd = matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
-    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowEnd, alpha: false, powerPreference: 'high-performance' });
+    // Không xin GPU rời ("high-performance"): laptop 2 card sẽ bật card rời → nóng, tốn pin
+    this.renderer = new THREE.WebGLRenderer({ antialias: !this.lowEnd, alpha: false, powerPreference: this.lowEnd ? 'low-power' : 'default' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lowEnd ? 1.25 : 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.lowEnd ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    // Bóng đổ chỉ tính lại khi nhà thay đổi (đèn đứng yên; xoay camera không làm bóng đổi)
+    this.renderer.shadowMap.autoUpdate = false;
+    this.shadowUntil = 0;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.el.appendChild(this.renderer.domElement);
@@ -401,9 +405,11 @@ class CityScene {
     for (const t of ['pointerup', 'pointercancel', 'pointerleave']) canvas.addEventListener(t, (e) => touches.delete(e.pointerId));
     canvas.addEventListener('pointerdown', (e) => { this.downAt = [e.clientX, e.clientY]; });
     canvas.addEventListener('pointerup', (e) => this.onClick(e));
-    // Vẽ 60 khung/giây khi có chuyển động (xoay camera, nhà mọc, bụi); đứng yên thì 30 khung/giây
+    // Vẽ 60 khung/giây khi có chuyển động (xoay camera, nhà mọc, bụi); đứng yên chỉ còn hiệu ứng nhẹ
+    // (khu đất sáng, vương miện xoay) → vẽ thưa 20 khung/giây, điện thoại 12 (đỡ nóng máy)
     this.busyUntil = 0;
-    this.frame = 0;
+    this.lastDraw = 0;
+    this.labelsDirty = true;
     this.controls.addEventListener('change', () => this.kick(400));
     canvas.addEventListener('pointerdown', () => this.kick(1500));
     this.fps = { last: 0, time: 0, n: 0, done: false };
@@ -438,6 +444,7 @@ class CityScene {
       this.renderer.setPixelRatio(1);
       this.sun.shadow.mapSize.set(1024, 1024);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+      this.shadowUntil = now + 200;
       this.resize();
     }
   }
@@ -449,6 +456,7 @@ class CityScene {
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.labelsDirty = true;
   }
 
   // Dựng lại bàn & khu đất khi số người chơi / vị trí của mình thay đổi
@@ -456,7 +464,7 @@ class CityScene {
     const n = view.players.length;
     const me = Math.max(0, view.me);
     const key = view.players.map((p) => p.id).join(',') + '|' + me;
-    if (key === this.layoutKey) return;
+    if (key === this.layoutKey) return false;
     this.layoutKey = key;
     // Nhãn CSS2D là phần tử DOM riêng: xóa cảnh 3D không tự xóa chúng → phải gỡ tay, nếu không sẽ bị nhân đôi
     for (const plot of this.plots.values()) plot.labelEl.remove();
@@ -521,6 +529,7 @@ class CityScene {
     s.left = -tableR; s.right = tableR; s.top = tableR; s.bottom = -tableR; s.far = 60;
     s.updateProjectionMatrix();
     this.firstFill = true;
+    return true;
   }
 
   slotPos(k) {
@@ -531,15 +540,19 @@ class CityScene {
 
   update(view, opts = {}) {
     this.opts = opts;
-    this.kick(1600); // nhà mọc / lún, vương miện bay
-    this.layout(view);
+    // Chỉ vẽ dồn (60 khung/giây) & tính lại bóng khi cảnh thật sự đổi: nhà mọc / lún / dời chỗ, vương miện đổi chủ
+    // (app.js gọi update mỗi lần vẽ lại giao diện — phần lớn không đổi gì trên bàn)
+    let changed = this.layout(view);
+    const prevCrown = this.crownTarget;
+    this.crownTarget = null;
     const destroyable = new Map((opts.destroyable || []).map((d) => [d.cardId, d]));
+    let flashing = false;
     view.players.forEach((p, i) => {
       const plot = this.plots.get(p.id);
       if (!plot) return;
       const ids = new Set(p.city.map((c) => c.id));
       for (const [id, obj] of plot.buildings) {
-        if (!ids.has(id) && !obj.userData.removing) { obj.userData.removing = true; this.dust(obj, 0x6b5a4a); }
+        if (!ids.has(id) && !obj.userData.removing) { obj.userData.removing = true; this.dust(obj, 0x6b5a4a); changed = true; }
       }
       p.city.forEach((c, k) => {
         let obj = plot.buildings.get(c.id);
@@ -549,21 +562,31 @@ class CityScene {
           if (this.firstFill) obj.scale.setScalar(1); else { obj.scale.set(1, 0.001, 1); this.dust(obj, 0xd9c49b, plot, k); }
           plot.group.add(obj);
           plot.buildings.set(c.id, obj);
+          changed = true;
         }
         const { x, z } = this.slotPos(k);
-        obj.userData.target = new THREE.Vector3(x, 0.15, z);
+        const tg = obj.userData.target;
+        if (!tg || tg.x !== x || tg.z !== z) { obj.userData.target = new THREE.Vector3(x, 0.15, z); changed = true; }
         if (this.firstFill || !obj.userData.placed) { obj.position.copy(obj.userData.target); obj.userData.placed = true; }
         obj.userData.destroy = destroyable.get(c.id) || null;
+        if (obj.userData.destroy) flashing = true;
       });
       const active = view.actor === i && view.phase !== 'ended';
       plot.active = active;
-      plot.labelEl.className = `c3-label ${active ? 'active' : ''} ${i === view.me ? 'me' : ''}`;
+      const cls = `c3-label ${active ? 'active' : ''} ${i === view.me ? 'me' : ''}`;
+      if (plot.labelEl.className !== cls) { plot.labelEl.className = cls; this.labelsDirty = true; }
       const html = opts.label ? opts.label(p, i) : `${p.hasCrown ? '👑 ' : ''}<b>${esc(p.name)}</b>${i === view.me ? (isEn() ? ' (you)' : ' (bạn)') : ''}
         <span>🪙 ${p.gold} · 🏠 ${p.citySize ?? p.city.length}/${view.target}</span>`;
-      if (plot.labelHtml !== html) { plot.labelEl.innerHTML = html; plot.labelHtml = html; }
+      if (plot.labelHtml !== html) { plot.labelEl.innerHTML = html; plot.labelHtml = html; this.labelsDirty = true; }
       if (p.hasCrown) this.crownTarget = plot;
     });
+    if (this.crownTarget !== prevCrown) changed = true;
+    this.flashing = flashing; // có công trình nhấp nháy đỏ (Lãnh chúa chọn phá) → vẽ dày hơn cho mượt
     this.firstFill = false;
+    if (changed) {
+      this.kick(1600); // nhà mọc / lún, vương miện bay
+      this.shadowUntil = performance.now() + 1700;
+    }
   }
 
   // Bụi bay khi xây / phá công trình
@@ -637,7 +660,11 @@ class CityScene {
     if (!this.visible || document.hidden || !this.el.isConnected) { this.fps.last = 0; return; }
     const now = performance.now();
     const busy = now < this.busyUntil || this.effects.length > 0;
-    if (!busy && (++this.frame & 1)) return; // đứng yên: bỏ 1/2 khung
+    if (!busy) {
+      const gap = this.flashing ? 33 : this.lowEnd ? 83 : 50; // đứng yên: 20 khung/giây (điện thoại 12)
+      if (now - this.lastDraw < gap - 4) return;
+    }
+    this.lastDraw = now;
     if (busy) this.measure(now); else this.fps.last = 0;
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
@@ -673,7 +700,9 @@ class CityScene {
           });
           u.flash = flash;
         }
-        obj.traverse((m) => { if (m.userData.bob) m.position.y += Math.sin(t * 2 + id) * 0.004; });
+        // Quả cầu lơ lửng: danh sách lấy 1 lần (không duyệt cây mỗi khung), vị trí tính từ gốc (không trôi khi đổi tốc độ khung)
+        if (!u.bobs) { u.bobs = []; obj.traverse((m) => { if (m.userData.bob) { m.userData.baseY = m.position.y; u.bobs.push(m); } }); }
+        for (const m of u.bobs) m.position.y = m.userData.baseY - Math.cos(t * 2 + id) * 0.06;
       }
     }
 
@@ -683,7 +712,7 @@ class CityScene {
       p.userData.vel.y -= dt * 6;
       p.position.addScaledVector(p.userData.vel, dt);
       p.material.opacity = Math.max(0, p.userData.life);
-      if (p.userData.life <= 0) { p.parent && p.parent.remove(p); this.effects.splice(i, 1); }
+      if (p.userData.life <= 0) { p.parent && p.parent.remove(p); p.material.dispose(); this.effects.splice(i, 1); }
     }
 
     if (this.crownTarget) {
@@ -694,8 +723,10 @@ class CityScene {
       this.crown.visible = true;
     } else this.crown.visible = false;
 
+    this.renderer.shadowMap.needsUpdate = now < this.shadowUntil;
     this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
+    // Nhãn tên là phần tử DOM: chỉ cập nhật vị trí khi camera / nội dung đổi (tránh ghi style mỗi khung)
+    if (busy || this.labelsDirty) { this.labels.render(this.scene, this.camera); this.labelsDirty = false; }
   }
 }
 

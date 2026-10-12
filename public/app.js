@@ -158,8 +158,8 @@ function skylineLayer(r, { ground, hMin, hMax, scale, fill, lit = 0, W, H }) {
       for (let i = 0; i < n; i++) {
         const wx = x + 6 * scale + r() * Math.max(1, w - 14 * scale);
         const wy = top + 12 * scale + r() * Math.max(1, h - 30 * scale);
-        const fl = r() < 0.25 ? ` class="fl" style="animation-delay:${(r() * 6).toFixed(1)}s"` : '';
-        win += `<rect x="${wx.toFixed(0)}" y="${wy.toFixed(0)}" width="${(4 * scale).toFixed(1)}" height="${(6 * scale).toFixed(1)}" rx="1"${fl}/>`;
+        if (r() < 0.25) r(); // giữ nguyên chuỗi số ngẫu nhiên (bố cục thành phố không đổi)
+        win += `<rect x="${wx.toFixed(0)}" y="${wy.toFixed(0)}" width="${(4 * scale).toFixed(1)}" height="${(6 * scale).toFixed(1)}" rx="1"/>`;
       }
     }
     x += w + r() * 14 * scale;
@@ -173,8 +173,8 @@ function ensureBackdrop() {
   const r = rng(2016);
   const stars = Array.from({ length: 170 }, () => {
     const x = r() * W, y = r() * H * 0.62, rad = 0.3 + r() * r() * 1.6;
-    const tw = r() < 0.22 ? ` class="tw" style="animation-delay:${(r() * 5).toFixed(1)}s"` : '';
-    return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${rad.toFixed(2)}"${tw}/>`;
+    if (r() < 0.22) r(); // giữ nguyên chuỗi số ngẫu nhiên (bố cục thành phố không đổi)
+    return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${rad.toFixed(2)}"/>`;
   }).join('');
   const el = document.createElement('div');
   el.id = 'scene-bg';
@@ -199,8 +199,14 @@ function ensureBackdrop() {
     <rect y="700" width="${W}" height="${H - 700}" fill="#111a31"/>
     ${skylineLayer(r, { ground: 810, hMin: 40, hMax: 160, scale: 1.25, fill: '#070b16', lit: 1.4, W, H })}
     <rect y="790" width="${W}" height="${H - 790}" fill="#070b16"/>
-  </svg>`;
+  </svg>${twinkles()}`;
   document.body.prepend(el);
+}
+
+// Vài ngôi sao lấp lánh: phần tử HTML riêng chỉ đổi opacity (GPU làm) — SVG nền giữ tĩnh, không phải vẽ lại
+function twinkles() {
+  const r = rng(77);
+  return `<div class="twinkle">${Array.from({ length: 14 }, () => `<i style="left:${(r() * 100).toFixed(1)}%;top:${(2 + r() * 38).toFixed(1)}%;animation-delay:${(r() * 3.6).toFixed(1)}s;transform:scale(${(0.6 + r() * 0.7).toFixed(2)})"></i>`).join('')}</div>`;
 }
 
 function hillPath(r, base, amp, w = 140, h = 104) {

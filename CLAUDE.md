@@ -34,6 +34,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - Không lộ thông tin bí mật trong `viewFor`: bài trên tay người khác, nhân vật chưa lộ diện, lá úp, bài vừa rút của người khác.
 - Thêm loại hành động mới: thêm vào `Game.act` switch + `botAction` (nếu bot cần) + UI trong `renderAction` + case trong click handler.
 - Điện thoại: không dựa vào rê chuột (`title`, `:hover`) cho thông tin quan trọng; chiều cao dùng `svh/dvh` kèm `vh` dự phòng; phần tử cố định mép màn hình cộng `env(safe-area-inset-*)`. Quạt bài trên màn cảm ứng: chạm 1 = xem, chạm 2 = làm (listener `click` capture trong app.js).
+- Hiệu năng (điện thoại hay nóng máy): animation lặp vô hạn chỉ đổi `opacity` / `transform` (glow thì đặt ở `::after` rồi đổi opacity) — không animate `box-shadow`, `filter`, `outline`, không animate phần tử trong SVG lớn; không dùng `backdrop-filter`, `background-attachment: fixed`. Bàn 3D: `update()` chỉ `kick()` + tính lại bóng khi cảnh thật sự đổi; đo bằng view xem trước `perf` (`renderer.info.render.frame`).
 - Comment ngắn bằng tiếng Việt, theo mật độ hiện có. Không thêm dependency khi chưa cần.
 - Icon từ game-icons.net (CC BY 3.0) — giữ dòng ghi công ở footer.
 

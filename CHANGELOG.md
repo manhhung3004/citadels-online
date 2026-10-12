@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Hiệu năng — mượt hơn, đỡ nóng máy (nhất là điện thoại)
+- Bàn 3D: chỉ vẽ dồn 60 khung/giây khi cảnh thật sự đổi (nhà mọc / lún / dời, vương miện đổi chủ) hoặc đang xoay / phóng; trước đây mỗi lần giao diện vẽ lại (rất thường xuyên khi bot chơi) đều bắt bàn vẽ hết tốc lực 1.6 giây. Đứng yên: 20 khung/giây (điện thoại 12), trước là 30–70. Đo bằng view xem trước `perf`: máy tính 38 → 19 (đứng yên), 70 → 19 (giao diện vẽ lại).
+- Bàn 3D: bóng đổ chỉ tính lại khi nhà thay đổi (`shadowMap.autoUpdate = false`), vương miện không đổ bóng; nhãn tên chỉ cập nhật khi camera / nội dung đổi; không xin GPU rời (`powerPreference`) — laptop 2 card không bật card rời; điện thoại dùng bóng PCF thường; quả cầu lơ lửng không duyệt cây mỗi khung; giải phóng vật liệu của bụi.
+- Bỏ mọi `backdrop-filter` (khung "Lượt của bạn" nằm trên canvas 3D phải làm mờ lại mỗi khung hình 3D; thanh trên cùng làm mờ khi cuộn) — nền các khung vốn đã gần đặc nên nhìn gần như không đổi.
+- Bỏ `background-attachment: fixed` (Android vẽ lại cả màn mỗi lần cuộn) → lớp nền cố định `body::before`.
+- Hình nền thành phố (trang chủ / phòng chờ) thành tĩnh: trước đây ~40 sao + ~cửa sổ nhấp nháy nằm trong SVG toàn màn có `drop-shadow` → vẽ lại cả màn 60 lần/giây. Giờ chỉ 14 sao HTML riêng đổi opacity (GPU làm).
+- Nhịp sáng (nhân vật đang chơi, ô công trình mục tiêu, viền đang nói, chấm chờ) đổi opacity / transform của lớp `::after` thay vì animate `box-shadow` / `outline` (vẽ lại mỗi khung).
+- Hệ điều hành bật "giảm chuyển động" → tắt animation lặp.
+- Đang trong thoại ở màn ≤ 1500px: nút trên thanh trên cùng chỉ còn icon để thanh không xuống 2 dòng.
+
 ### Thêm — âm thanh
 - Hiệu ứng âm thanh tổng hợp bằng Web Audio (`public/sfx.js`, `window.Sfx`), không cần file âm thanh: chuông khi đến lượt bạn, lật bài khi nhân vật khác lộ diện, tù và khi sang vòng mới, búa khi xây, nhát chém khi bị tấn công (ám sát / trộm / phá), xu leng keng khi vàng của bạn tăng / giảm, kèn khi trao vương miện / đủ công trình / kết thúc ván, tiếng "ting" khi có tin nhắn mới, tiếng "tách" nhẹ khi bấm nút. Âm sắc mềm: chuông FM + sóng sin / tam giác (không dùng sóng vuông / răng cưa), đường bao lên tuyến tính – tắt dần theo hàm mũ (không "tách" đầu / cuối nốt), mọi tiếng theo giọng Rê như nhạc nền, lọc bớt dải cao + vang nhẹ; tiếng quan trọng (đến lượt, vòng mới, tấn công, vương miện, thắng) làm nhạc nền nhỏ đi 1 giây.
 - Nhạc nền trung cổ tự sáng tác bằng Web Audio (giọng D thứ: pad hợp âm, bass, đàn hạc rải, đàn lute giai điệu ngẫu nhiên nên không lặp y hệt, trống da, vang nhẹ). Phát ở mọi màn sau lần chạm đầu tiên; nhỏ lại khi đang trong thoại; dừng hẳn khi ẩn tab (không tốn CPU).
