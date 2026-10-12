@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-12
+
 ### Hiệu năng — mượt hơn, đỡ nóng máy (nhất là điện thoại)
 - Bàn 3D: chỉ vẽ dồn 60 khung/giây khi cảnh thật sự đổi (nhà mọc / lún / dời, vương miện đổi chủ) hoặc đang xoay / phóng; trước đây mỗi lần giao diện vẽ lại (rất thường xuyên khi bot chơi) đều bắt bàn vẽ hết tốc lực 1.6 giây. Đứng yên: 20 khung/giây (điện thoại 12), trước là 30–70. Đo bằng view xem trước `perf`: máy tính 38 → 19 (đứng yên), 70 → 19 (giao diện vẽ lại).
 - Bàn 3D: bóng đổ chỉ tính lại khi nhà thay đổi (`shadowMap.autoUpdate = false`), vương miện không đổ bóng; nhãn tên chỉ cập nhật khi camera / nội dung đổi; không xin GPU rời (`powerPreference`) — laptop 2 card không bật card rời; điện thoại dùng bóng PCF thường; quả cầu lơ lửng không duyệt cây mỗi khung; giải phóng vật liệu của bụi.
@@ -52,6 +54,8 @@
 
 ### Thêm — skill cho Claude Code
 - 29 skill bên thứ ba trong `.claude/skills/` (frontend-design, design, ui-ux-pro-max, tailwind-design-system, claude-md-improver, superpowers) + lệnh `/revise-claude-md`; nguồn & giấy phép ở `.claude/skills/THIRD_PARTY.md`.
+
+## [1.1.0] - 2026-10-09
 
 ### Thêm — thoại theo phòng (voice chat)
 - Nút **Thoại** ở phòng chờ và thanh trên cùng: vào kênh thoại của phòng, tắt/bật micro (phím **M**), tắt loa, rời thoại; số người đang trong thoại hiện trên nút.
@@ -136,8 +140,6 @@
 - Mô tả dài trên lá công trình bị cắt chữ: lá bài giờ tự cao theo nội dung.
 - Thêm test quét toàn bộ ván để đảm bảo không bao giờ lộ nhân vật chưa được gọi.
 - Khay bài che đen một phần ô thông tin ở cột phải trên màn hình rộng (bố cục căn giữa): khay bài giờ được đặt theo vị trí đo thật của cột chính (`placeTray`).
-
-## [1.1.0] - 2026-10-09
 
 ### Thêm
 - Hình minh họa cho 8 nhân vật và 28 loại công trình (icon game-icons.net, CC BY 3.0, lưu cục bộ trong `public/icons.js`).
