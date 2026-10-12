@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Thêm — âm thanh
+- Hiệu ứng âm thanh tổng hợp bằng Web Audio (`public/sfx.js`, `window.Sfx`), không cần file âm thanh: chuông khi đến lượt bạn, lật bài khi nhân vật khác lộ diện, tù và khi sang vòng mới, búa khi xây, nhát chém khi bị tấn công (ám sát / trộm / phá), xu leng keng khi vàng của bạn tăng / giảm, kèn khi trao vương miện / đủ công trình / kết thúc ván, tiếng "ting" khi có tin nhắn mới, tiếng "tách" nhẹ khi bấm nút. Âm sắc mềm: chuông FM + sóng sin / tam giác (không dùng sóng vuông / răng cưa), đường bao lên tuyến tính – tắt dần theo hàm mũ (không "tách" đầu / cuối nốt), mọi tiếng theo giọng Rê như nhạc nền, lọc bớt dải cao + vang nhẹ; tiếng quan trọng (đến lượt, vòng mới, tấn công, vương miện, thắng) làm nhạc nền nhỏ đi 1 giây.
+- Nhạc nền trung cổ tự sáng tác bằng Web Audio (giọng D thứ: pad hợp âm, bass, đàn hạc rải, đàn lute giai điệu ngẫu nhiên nên không lặp y hệt, trống da, vang nhẹ). Phát ở mọi màn sau lần chạm đầu tiên; nhỏ lại khi đang trong thoại; dừng hẳn khi ẩn tab (không tốn CPU).
+- Nút 🎵 (nhạc nền) và 🔊 / 🔇 (hiệu ứng) bật / tắt riêng, ở trang chủ và thanh trên cùng (phòng chờ & trong ván); lựa chọn được lưu trên trình duyệt. iOS / Android: tiếng chỉ phát sau lần chạm đầu tiên (luật của trình duyệt). Xem trước: view `sfx`.
+- Bỏ dòng "bản fan làm để chơi cùng bạn bè" ở chân trang.
+
 ### Thay đổi — đồng bộ phòng chờ & màn chơi
 - Phòng chờ dùng chung thanh trên cùng với màn chơi (`renderTopbar()`): Luật chơi, Thoại, Trò chuyện, ngôn ngữ, Rời phòng luôn cùng vị trí, cùng kiểu. Bỏ khung chat lớn và khung "Xem luật đầy đủ" ở phòng chờ — chat là nút có số tin chưa đọc + khung bật ra như trong ván.
 - Rời phòng: 1 kiểu duy nhất ở mọi nơi — bấm 2 lần (lần 1 nút chuyển đỏ "Bấm lần nữa để rời", tự trở lại sau 3 giây, `ui.leaveArmed`); bỏ hộp `confirm()` của trình duyệt khi đang chơi (tooltip vẫn báo bot sẽ chơi thay). Nút không còn nằm cạnh "Bắt đầu chơi".
