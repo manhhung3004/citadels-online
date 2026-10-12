@@ -25,6 +25,7 @@
   <script src="states.js"></script>
   <script src="icons.js"></script>
   <script src="voice.js"></script>
+  <script src="sfx.js"></script>
   <script src="app.js"></script>
   <script type="module" src="city3d.js"></script>
   <script>
@@ -97,6 +98,24 @@
       }, 800);
     }    else if (which === 'lobbyleave') { handlers.state(STATES.lobby); ui.leaveArmed = true; render(); }
     else if (which === 'lobbychat') { handlers.state(STATES.lobby); ui.chatOpen = true; render(); }
+    else if (which === 'sfx') {
+      // Kiểm tra: phát đủ mọi tiếng không lỗi; nút 🔊 bấm → tắt (lưu lại), bấm lần nữa → bật
+      handlers.state(STATES.turn);
+      const r = [];
+      document.dispatchEvent(new Event('pointerdown'));
+      setTimeout(() => { try {
+        ['turn', 'reveal', 'round', 'coin', 'coinLoss', 'build', 'attack', 'crown', 'finish', 'chat', 'tick'].forEach((n, i) => Sfx.play(n, i * 0.01)); r.push(Sfx.lastError ? 'err:' + Sfx.lastError : true);
+        const btn = () => document.querySelector('[data-act="sfx"]');
+        r.push(!!btn() && !Sfx.muted);
+        btn().click(); r.push(Sfx.muted && btn().classList.contains('off'));
+        btn().click(); r.push(!Sfx.muted);
+        // Nhạc nền: đang ở phòng → phát; bấm 🎵 → dừng; bấm lại → phát
+        const mb = () => document.querySelector('[data-act="music"]');
+        r.push(Sfx.musicPlaying);
+        mb().click(); r.push(!Sfx.musicPlaying && mb().classList.contains('off'));
+        mb().click(); r.push(Sfx.musicPlaying);
+      } catch (e) { r.push('err:' + e.message); } document.title = 'SFXTEST ' + r.join(','); }, 800);
+    }
     else if (which === 'traymin') {
       // Kiểm tra: cuộn khỏi bàn 3D → khay thu gọn; cuộn lại → mở; tới lượt mình (có thanh điều khiển) → luôn mở
       handlers.state(STATES.wait);

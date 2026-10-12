@@ -365,10 +365,36 @@ socket.on('state', (s) => {
   const pickKey = g && g.draft && g.draft.options ? `${g.round}-${g.draft.idx}-${g.draft.awaitingDiscard}` : null;
   if (pickKey !== ui.pickKey) { ui.pickKey = pickKey; ui.pickerHidden = false; }
   setTitle();
-  if (g) { trackChanges(g); announce(g); markFreshLog(g); } else { ui.prevGold = {}; ui.prevCity = null; ui.lastLogId = null; }
+  if (g) { trackChanges(g); announce(g); sfxFor(g); markFreshLog(g); } else { ui.prevGold = {}; ui.prevCity = null; ui.lastLogId = null; }
+  sfxChat(s.room);
   render();
   if (g) flyCoins(g);
 });
+
+// ---------- Âm thanh (public/sfx.js) ----------
+const sfx = (name, delay) => window.Sfx && Sfx.play(name, delay);
+// Sự kiện mới trong nhật ký → 1–2 tiếng theo mức quan trọng; vàng của mình đổi → tiếng xu
+function sfxFor(g) {
+  if (ui.lastLogId == null) return; // vừa tải trang: im lặng
+  const tones = new Set(g.log.filter((e) => e.id > ui.lastLogId).map((e) => e.tone));
+  const d = 0.12; // chờ tiếng thông báo (vòng mới / lộ diện) phát trước
+  if (tones.has('finish') && g.phase !== 'ended') sfx('finish', d);
+  else if (tones.has('attack')) sfx('attack', d);
+  else if (tones.has('build')) sfx('build', d);
+  else if (tones.has('crown')) sfx('crown', d);
+  const mine = g.players[g.me] && ui.deltas[g.players[g.me].id];
+  if (mine > 0) sfx('coin', 0.05); else if (mine < 0) sfx('coinLoss', 0.05);
+}
+// Tin nhắn mới của người khác
+function sfxChat(room) {
+  const chat = room ? room.chat : [];
+  const lastAt = chat.length ? chat[chat.length - 1].at : 0;
+  const prev = ui.sfxChatAt;
+  ui.sfxChatAt = lastAt;
+  if (prev == null || lastAt <= prev) return;
+  const me = room.members.find((m) => m.id === S.you);
+  if (chat.some((m) => m.at > prev && (!me || m.name !== me.name))) sfx('chat');
+}
 
 // Dòng nhật ký mới (id lớn hơn lần nhận trước) sẽ sáng lên vài giây; lần tải trang đầu không đánh dấu
 function markFreshLog(g) {
@@ -562,6 +588,7 @@ function announce(g) {
   const first = ui.announceKey === null;
   ui.announceKey = key;
   if (first) return; // không phát lại khi vừa tải trang
+  sfx(g.phase === 'draft' ? 'round' : g.phase === 'ended' ? 'finish' : g.turn.pi === g.me ? 'turn' : 'reveal');
   $('#overlay').innerHTML = html;
   clearTimeout(announce.timer);
   announce.timer = setTimeout(() => { $('#overlay').innerHTML = ''; }, 2300);
@@ -631,6 +658,8 @@ const waitDots = '<span class="dots"><span></span><span></span><span></span></sp
 
 // ---------- Render ----------
 function render() {
+  // Nhạc nền: phát ở mọi màn (sau lần chạm đầu tiên); đang trong thoại thì nhỏ lại
+  if (window.Sfx) Sfx.music(true, !!(window.Voice && Voice.on));
   const active = document.activeElement;
   const keep = active && active.id ? { id: active.id, val: active.value, pos: active.selectionStart } : null;
   // Nhật ký: có sự kiện mới → luôn cuộn tới dòng mới nhất; không có → giữ nguyên chỗ đang xem
@@ -757,12 +786,12 @@ function renderStage(g) {
   return `${live ? '' : action}<div class="stage">${live ? action : ''}${tools}${modeHint}<div id="board-slot"></div></div>`;
 }
 
-const credit = () => `<div class="credit">Icon: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC BY 3.0) · Citadels © Bruno Faidutti — ${tx('bản fan làm để chơi cùng bạn bè', 'a fan-made version for playing with friends')}
+const credit = () => `<div class="credit">Icon: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC BY 3.0) · Citadels © Bruno Faidutti
   <div class="made-by">Made by <b>hungnm</b></div></div>`;
 
 function renderHome() {
   const code = new URLSearchParams(location.search).get('room') || '';
-  return `<div class="home-lang">${langBtn()}</div><div class="home">
+  return `<div class="home-lang">${sfxBtn()}${langBtn()}</div><div class="home">
     <div class="hero">
       <div class="logo">${icon('logo')}</div>
       <h1>Citadels</h1>
@@ -877,6 +906,10 @@ function renderCastPicker(r, host) {
 }
 
 // Thanh trên cùng dùng chung cho phòng chờ & màn chơi: luật chơi, thoại, chat, ngôn ngữ, rời phòng luôn cùng chỗ, cùng kiểu
+// Nút nhạc nền 🎵 và hiệu ứng âm thanh 🔊 (bật/tắt riêng, lưu trên trình duyệt)
+const sfxBtn = () => window.Sfx ? `<button class="small sfx-btn ${Sfx.musicOn ? '' : 'off'}" data-act="music" title="${Sfx.musicOn ? tx('Tắt nhạc nền', 'Music off') : tx('Bật nhạc nền', 'Music on')}" aria-pressed="${Sfx.musicOn}">🎵</button>
+  <button class="small sfx-btn ${Sfx.muted ? 'off' : ''}" data-act="sfx" title="${Sfx.muted ? tx('Bật hiệu ứng âm thanh', 'Sound effects on') : tx('Tắt hiệu ứng âm thanh', 'Sound effects off')}" aria-pressed="${!Sfx.muted}">${Sfx.muted ? '🔇' : '🔊'}</button>` : '';
+
 function renderTopbar() {
   const g = S.game;
   const r = S.room;
@@ -901,6 +934,7 @@ function renderTopbar() {
     <button class="small" data-act="rules" title="${tx('Luật chơi & mẹo', 'Rules & tips')}">📜 <span class="tb-l">${tx('Luật chơi & mẹo', 'Rules & tips')}</span></button>
     ${voiceCtl()}
     ${chatButton()}
+    ${sfxBtn()}
     ${langBtn()}
     ${host && live ? `<span class="stat tb-bot"><span class="tb-l">Bot</span> ${seg('botSpeed', speeds(), r.options.botSpeed || 'normal', true)}</span>` : ''}
     ${ui.connected ? '' : `<span class="stat" style="color:var(--danger)" title="${tx('Mất kết nối', 'Disconnected')}">● <span class="tb-l">${tx('Mất kết nối', 'Disconnected')}</span></span>`}
@@ -1809,7 +1843,10 @@ document.addEventListener('click', (e) => {
   if (!el || el.disabled) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
+  if (act !== 'sfx') sfx('tick');
   switch (act) {
+    case 'sfx': Sfx.toggle(); return render();
+    case 'music': Sfx.toggleMusic(); return render();
     case 'create': {
       const name = $('#name').value.trim();
       if (!name) return toast(tx('Hãy nhập tên của bạn', 'Please enter your name'));

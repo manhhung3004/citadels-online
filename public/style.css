@@ -1024,7 +1024,7 @@ button.primary:active:not(:disabled) { transform: translateY(3px); box-shadow: 0
 }
 .cs-card b { position: absolute; top: 3px; left: 5px; font: 800 11px 'Cinzel', serif; color: var(--gold); }
 /* Chuyển ngôn ngữ: nút góc trên trang chủ; nhãn 3D tiếng Anh */
-.home-lang { display: flex; justify-content: flex-end; max-width: 980px; margin: 0 auto; padding: 14px 16px 0; }
+.home-lang { display: flex; gap: 8px; justify-content: flex-end; max-width: 980px; margin: 0 auto; padding: 14px 16px 0; }
 html[lang="en"] .c3-label.active::before { content: '▶ Playing'; }
 .topbar { gap: 12px; }
 
@@ -1578,3 +1578,7 @@ body.tray-dock:not(.scenic) .credit { padding-bottom: 300px; }
 @media (prefers-reduced-motion: reduce) { .hand-tray { transition: none; } }
 /* Giữ sẵn chỗ cho bàn 3D trước khi Three.js tải xong (không giật bố cục, khay bài đo đúng vị trí bàn) */
 .stage #board-slot { min-height: var(--stage-h); }
+
+/* Nút bật/tắt âm thanh: khi tắt thì mờ đi */
+.sfx-btn { min-width: 36px; }
+.sfx-btn.off { opacity: .6; filter: grayscale(.6); }
