@@ -661,10 +661,33 @@ function render() {
   if (cl) cl.scrollTop = cl.scrollHeight;
   document.querySelectorAll(`#app :is(${ENTER_SEL})`).forEach((el) => { if (shown.has(enterKey(el))) el.style.animation = 'none'; });
   placeTray();
+  watchStage();
   equalCards();
   restoreHov();
   sync3d();
 }
+
+// Khay bài thu gọn khi bàn 3D ra khỏi tầm nhìn (cuộn xuống xem thành phố): chỉ còn viên "Bài trên tay",
+// tránh quạt bài lơ lửng giữa khoảng trống. Tới lượt mình (có thanh điều khiển) thì khay luôn mở.
+// Tiêu chí: phía sau vùng khay bài (đáy màn hình) có phải là bàn 3D không — quạt bài nằm "trên mặt bàn".
+function watchStage() {
+  document.body.classList.toggle('tray-dock', !!$('.hand-tray.has-dock'));
+  updateTray();
+}
+function updateTray() {
+  const st = S.game && $('.stage:not(.off)'); // tắt 3D: không có bàn → khay luôn mở như cũ
+  let onTable = true;
+  if (st) {
+    const r = st.getBoundingClientRect();
+    const zone = window.innerHeight - 120; // mép trên vùng quạt bài
+    onTable = r.top < zone && r.bottom > zone;
+  }
+  document.body.classList.toggle('tray-min', !!S.game && !onTable && !$('.hand-tray.has-dock'));
+}
+let trayRaf = 0;
+const trayLater = () => { if (!trayRaf) trayRaf = requestAnimationFrame(() => { trayRaf = 0; updateTray(); }); };
+window.addEventListener('scroll', trayLater, { passive: true });
+window.addEventListener('resize', trayLater);
 
 // Lá nhân vật trong bảng chọn cao bằng nhau (mô tả dài ngắn khác nhau, có thể xuống 2 hàng)
 function equalCards() {
@@ -853,6 +876,38 @@ function renderCastPicker(r, host) {
     ${host ? `<div class="row" style="margin-top:8px"><button class="small" data-act="castPreset" data-val="base">${tx('Bộ cơ bản', 'Base set')}</button><button class="small" data-act="castPreset" data-val="random">🎲 ${tx('Rút thử 1 bộ', 'Draw a random set')}</button><span class="muted" style="font-size:12.5px">${tx('Rê chuột vào tên để xem kỹ năng · tab Nhân vật trong Luật chơi có mô tả đầy đủ', 'Hover a name to see its ability · the Characters tab in the Rules has full descriptions')}</span></div>` : ''}`;
 }
 
+// Thanh trên cùng dùng chung cho phòng chờ & màn chơi: luật chơi, thoại, chat, ngôn ngữ, rời phòng luôn cùng chỗ, cùng kiểu
+function renderTopbar() {
+  const g = S.game;
+  const r = S.room;
+  const host = r.hostId === S.you;
+  const stats = g ? `
+    <span class="stat" title="${tx('Vòng', 'Round')}">${icon('scroll')} <span class="tb-l">${tx('Vòng', 'Round')}</span> <b>${g.round}</b></span>
+    <span class="stat" title="${tx('Chồng bài', 'Deck')}">${icon('cards')} <span class="tb-l">${tx('Chồng bài', 'Deck')}</span> <b>${g.deckCount}</b></span>
+    <span class="stat tb-goal" title="${tx('Mục tiêu', 'Goal')}">${icon('city')} <span class="tb-l">${tx('Mục tiêu', 'Goal')}</span> <b>${g.target}</b> <span class="tb-l">${tx('công trình', 'districts')}</span></span>
+    ${g.taxPool !== null && g.taxPool !== undefined ? `<span class="stat" title="${tx('Kho thuế — Người thu thuế lấy hết khi lộ diện', 'Tax pool — the Tax Collector takes it all when revealed')}">${icon('taxcollector')} <span class="tb-l">${tx('Kho thuế', 'Tax pool')}</span> <b>${g.taxPool}</b></span>` : ''}`
+    : `<span class="stat" title="${tx('Người chơi', 'Players')}">👥 <b>${r.members.length}</b></span>`;
+  // Rời phòng: bấm 2 lần (lần 1 chuyển đỏ, 3 giây tự trở lại) — giống nhau ở phòng chờ & trong ván
+  const live = g && g.phase !== 'ended';
+  const leaveTip = live ? tx('Rời phòng — bot sẽ chơi thay bạn', 'Leave the room — a bot will play for you') : tx('Rời phòng', 'Leave the room');
+  const leave = ui.leaveArmed
+    ? `<button class="small danger tb-leave armed" data-act="leave" title="${leaveTip}">⚠️ ${tx('Bấm lần nữa để rời', 'Tap again to leave')}</button>`
+    : `<button class="small danger tb-leave" data-act="leave" title="${leaveTip}">🚪 <span class="tb-l">${tx('Rời phòng', 'Leave')}</span></button>`;
+  return `<div class="topbar">
+    <span class="title">${icon('logo')} Citadels</span>
+    <span class="stat tb-room">${tx('Phòng', 'Room')} <b>${r.code}</b></span>
+    ${stats}
+    <span class="spacer"></span>
+    <button class="small" data-act="rules" title="${tx('Luật chơi & mẹo', 'Rules & tips')}">📜 <span class="tb-l">${tx('Luật chơi & mẹo', 'Rules & tips')}</span></button>
+    ${voiceCtl()}
+    ${chatButton()}
+    ${langBtn()}
+    ${host && live ? `<span class="stat tb-bot"><span class="tb-l">Bot</span> ${seg('botSpeed', speeds(), r.options.botSpeed || 'normal', true)}</span>` : ''}
+    ${ui.connected ? '' : `<span class="stat" style="color:var(--danger)" title="${tx('Mất kết nối', 'Disconnected')}">● <span class="tb-l">${tx('Mất kết nối', 'Disconnected')}</span></span>`}
+    ${leave}
+  </div>`;
+}
+
 function renderLobby() {
   const r = S.room;
   const host = r.hostId === S.you;
@@ -868,11 +923,11 @@ function renderLobby() {
     </div>`).join('');
   const empty = Array.from({ length: Math.max(0, Math.min(2, maxP - r.members.length)) }, () =>
     `<div class="seat empty">${host ? `<button class="small ghost" data-act="addBot">+ ${tx('Thêm bot', 'Add bot')}</button>` : tx('Ghế trống', 'Empty seat')}</div>`).join('');
-  return `<div class="lobby">
+  return `${renderTopbar()}<div class="lobby">
     <div class="box">
       <div class="row" style="justify-content:space-between;align-items:flex-end">
         <div><div class="muted" style="font-size:13px;margin-bottom:6px">${tx('Mã phòng — gửi cho bạn bè', 'Room code — share with friends')}</div><div class="code">${r.code}</div></div>
-        <div class="row">${voiceCtl()}<button data-act="copy" data-link="${esc(link)}">📋 ${tx('Sao chép link mời', 'Copy invite link')}</button>${langBtn('')}</div>
+        <button data-act="copy" data-link="${esc(link)}">📋 ${tx('Sao chép link mời', 'Copy invite link')}</button>
       </div>
       <div class="section-title" style="margin-top:22px">${tx('Người chơi', 'Players')} ${r.members.length}/${maxP}</div>
       <div class="seats">${seats}${empty}</div>
@@ -884,39 +939,20 @@ function renderLobby() {
       <div class="section-title">${tx('Bộ nhân vật', 'Character set')} <span class="hint">· ${tx('mỗi số 1 nhân vật; số 9 tùy chọn (cần từ 4 người, bắt buộc khi chơi 8 người)', '1 character per rank; rank 9 optional (needs 4+ players, required with 8 players)')}</span></div>
       ${renderCastPicker(r, host)}
       ${issue ? `<div class="cast-warn">⚠️ ${issue}</div>` : ''}
-      <div class="row" style="justify-content:space-between;margin-top:16px">
-        <button class="danger" data-act="leave">${tx('Rời phòng', 'Leave room')}</button>
+      <div class="row lobby-actions">
         ${host ? `<div class="row"><button data-act="addBot" ${r.members.length >= maxP ? 'disabled' : ''}>${icon('robot')} ${tx('Thêm bot', 'Add bot')}</button>
           <button class="primary big" data-act="start" ${r.members.length < 2 || issue ? 'disabled' : ''}>${tx('Bắt đầu chơi ▶', 'Start game ▶')}</button></div>`
         : `<span class="muted">${waitDots} ${tx('Đang chờ chủ phòng bắt đầu', 'Waiting for the host to start')}</span>`}
       </div>
     </div>
-    ${chatHtml()}
-    ${rulesHtml()}
-  </div>${credit()}`;
+  </div>${credit()}${renderChatPop()}`;
 }
 
 function renderGame() {
   const g = S.game;
   const r = S.room;
-  const host = r.hostId === S.you;
   return `
-  <div class="topbar">
-    <span class="title">${icon('logo')} Citadels</span>
-    <span class="stat tb-room">${tx('Phòng', 'Room')} <b>${r.code}</b></span>
-    <span class="stat" title="${tx('Vòng', 'Round')}">${icon('scroll')} <span class="tb-l">${tx('Vòng', 'Round')}</span> <b>${g.round}</b></span>
-    <span class="stat" title="${tx('Chồng bài', 'Deck')}">${icon('cards')} <span class="tb-l">${tx('Chồng bài', 'Deck')}</span> <b>${g.deckCount}</b></span>
-    <span class="stat tb-goal" title="${tx('Mục tiêu', 'Goal')}">${icon('city')} <span class="tb-l">${tx('Mục tiêu', 'Goal')}</span> <b>${g.target}</b> <span class="tb-l">${tx('công trình', 'districts')}</span></span>
-    ${g.taxPool !== null && g.taxPool !== undefined ? `<span class="stat" title="${tx('Kho thuế — Người thu thuế lấy hết khi lộ diện', 'Tax pool — the Tax Collector takes it all when revealed')}">${icon('taxcollector')} <span class="tb-l">${tx('Kho thuế', 'Tax pool')}</span> <b>${g.taxPool}</b></span>` : ''}
-    <span class="spacer"></span>
-    <button class="small" data-act="rules" title="${tx('Luật chơi & mẹo', 'Rules & tips')}">📜 <span class="tb-l">${tx('Luật chơi & mẹo', 'Rules & tips')}</span></button>
-    ${voiceCtl()}
-    ${chatButton()}
-    ${langBtn()}
-    ${host && g.phase !== 'ended' ? `<span class="stat tb-bot"><span class="tb-l">Bot</span> ${seg('botSpeed', speeds(), r.options.botSpeed || 'normal', true)}</span>` : ''}
-    ${ui.connected ? '' : `<span class="stat" style="color:var(--danger)" title="${tx('Mất kết nối', 'Disconnected')}">● <span class="tb-l">${tx('Mất kết nối', 'Disconnected')}</span></span>`}
-    <button class="small danger" data-act="leave" title="${tx('Rời phòng', 'Leave')}">🚪 <span class="tb-l">${tx('Rời phòng', 'Leave')}</span></button>
-  </div>
+  ${renderTopbar()}
   <div class="layout">
     <div class="main">
       ${renderRoundBar()}
@@ -1246,7 +1282,7 @@ function renderHand() {
   }).join('');
   // Màn hẹp: ô thông tin nằm trong khay bài (cột phải bị đẩy xuống cuối trang)
   return `<div class="hand-tray ${dock ? 'has-dock' : ''}">${dock}
-    <div class="tray-hint">${icon('cards')} ${tx('Bài trên tay', 'Cards in hand')}: <b>${n}</b>${hint ? ` · ${hint}` : ''}</div>
+    <div class="tray-hint" data-act="trayPeek" title="${tx('Bấm để về bàn chơi', 'Tap to go back to the table')}">${icon('cards')} ${tx('Bài trên tay', 'Cards in hand')}: <b>${n}</b>${hint ? ` · ${hint}` : ''}</div>
     <div class="fan">${cards || `<span class="tray-empty">${tx('Không có lá nào', 'No cards')}</span>`}</div></div>`;
 }
 
@@ -1796,7 +1832,15 @@ document.addEventListener('click', (e) => {
     case 'kick': return socket.emit('kick', { id });
     case 'start': return socket.emit('start');
     case 'leave':
-      if (S.game && S.game.phase !== 'ended' && !confirm(tx('Rời phòng? Bot sẽ chơi thay bạn.', 'Leave the room? A bot will play for you.'))) return;
+      // Lần bấm đầu chỉ "lên cò" (nút chuyển đỏ), 3 giây không bấm lại thì thôi — phòng chờ & trong ván như nhau
+      if (!ui.leaveArmed) {
+        ui.leaveArmed = true;
+        clearTimeout(ui.leaveTimer);
+        ui.leaveTimer = setTimeout(() => { ui.leaveArmed = false; render(); }, 3000);
+        return render();
+      }
+      ui.leaveArmed = false;
+      clearTimeout(ui.leaveTimer);
       history.replaceState(null, '', location.pathname);
       return socket.emit('leave');
     case 'backToLobby': return socket.emit('backToLobby');
@@ -1887,6 +1931,11 @@ document.addEventListener('click', (e) => {
       if (ui.chatOpen) { const i = $('#chatInput'); if (i) i.focus(); }
       return;
     case 'lang': return setLang(ui.lang === 'en' ? 'vi' : 'en');
+    case 'trayPeek': { // khay đang thu gọn: bấm viên "Bài trên tay" → cuộn về bàn chơi
+      const st = $('.stage');
+      if (document.body.classList.contains('tray-min') && st) st.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     case 'tokInfo': { const r = Number(el.dataset.rank); ui.tokInfo = ui.tokInfo === r ? null : r; return render(); }
     case 'voiceJoin': return voiceJoin();
     case 'voiceMute': return Voice.setMuted(!Voice.muted);

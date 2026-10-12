@@ -95,7 +95,19 @@
         r.push(!document.querySelector('.fan .dcard.hov'));
         document.title = 'TOUCHTEST ' + r.join(',');
       }, 800);
-    }    else if (which === 'tokinfo') { handlers.state(STATES.wait); ui.tokInfo = 1; render(); }
+    }    else if (which === 'lobbyleave') { handlers.state(STATES.lobby); ui.leaveArmed = true; render(); }
+    else if (which === 'lobbychat') { handlers.state(STATES.lobby); ui.chatOpen = true; render(); }
+    else if (which === 'traymin') {
+      // Kiểm tra: cuộn khỏi bàn 3D → khay thu gọn; cuộn lại → mở; tới lượt mình (có thanh điều khiển) → luôn mở
+      handlers.state(STATES.wait);
+      const min = () => document.body.classList.contains('tray-min');
+      const r = [];
+      setTimeout(() => { r.push(!min()); window.scrollTo(0, document.body.scrollHeight); }, 1000);
+      setTimeout(() => { r.push(min()); handlers.state(STATES.turn); }, 2000);
+      setTimeout(() => { r.push(!min()); handlers.state(STATES.wait); window.scrollTo(0, 0); }, 3000);
+      setTimeout(() => { r.push(!min()); document.title = 'TRAYTEST ' + r.join(','); }, 4000);
+    }
+    else if (which === 'tokinfo') { handlers.state(STATES.wait); ui.tokInfo = 1; render(); }
     else if (which === 'chat') { handlers.state(STATES.wait); ui.chatOpen = true; render(); }
     else if (which === 'dock') { handlers.state(STATES.myturn); ui.turnPopupHidden = true; render(); }
     else if (which === 'logfresh') {
