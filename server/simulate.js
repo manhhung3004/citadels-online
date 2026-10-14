@@ -11,7 +11,7 @@ for (let n = 2; n <= 8; n++) {
     const players = Array.from({ length: n }, (_, i) => ({ id: `b${i}`, name: `Bot ${i}`, isBot: true }));
     const chars = k < 20 && n <= 7 ? undefined : randomCast(n); // vài ván đầu dùng bộ cơ bản
     (chars || []).forEach((c) => used.add(c));
-    const g = new Game(players, { target: k % 2 ? 7 : 8, chars });
+    const g = new Game(players, { target: k % 2 ? 7 : 8, chars, reshuffle: k % 4 === 3, secretCast: k % 4 === 3 }); // 1/4 số ván: Luật rừng NNHP
     const total = () => g.deck.length + g.players.reduce((s, p) => s + p.hand.length + p.city.length, 0)
       + (g.turn && g.turn.drawn ? g.turn.drawn.length : 0);
     const gold = () => g.players.reduce((s, p) => s + p.gold, 0) + g.taxPool;

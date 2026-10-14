@@ -35,7 +35,12 @@ app.get('/ice.json', (req, res) => {
   res.json(ice);
 });
 const server = http.createServer(app);
-const io = new Server(server);
+// Gói từ client tối đa 64KB (mặc định 1MB). Nén WebSocket bật qua WS_COMPRESS=1 (bớt băng thông nhưng tốn CPU — máy chủ yếu thì để tắt)
+const io = new Server(server, { maxHttpBufferSize: 64 * 1024, perMessageDeflate: process.env.WS_COMPRESS === '1' ? { threshold: 2048 } : false });
+
+// Không để 1 lỗi bất ngờ làm sập cả server (mọi phòng đang chơi sẽ mất): ghi log rồi chạy tiếp
+process.on('uncaughtException', (e) => console.error('Lỗi chưa bắt:', e));
+process.on('unhandledRejection', (e) => console.error('Promise lỗi chưa bắt:', e));
 
 const rooms = new Map(); // code -> room
 const playerRoom = new Map(); // playerId -> code
@@ -49,6 +54,9 @@ function newCode() {
 }
 
 const cleanName = (s) => String(s || '').trim().slice(0, 20) || 'Người chơi';
+// Avatar: 1 trong các icon nhân vật (client vẽ từ icons.js); '' = chữ cái đầu tên
+const AVATARS = new Set(['assassin', 'thief', 'magician', 'king', 'bishop', 'merchant', 'architect', 'warlord', 'witch', 'magistrate', 'spy', 'blackmailer', 'wizard', 'seer', 'emperor', 'abbot', 'alchemist', 'navigator', 'scholar', 'diplomat', 'marshal', 'artist', 'queen', 'taxcollector']);
+const cleanAvatar = (a) => (AVATARS.has(a) ? a : '');
 
 function broadcast(room) {
   syncTimer(room);
@@ -57,7 +65,7 @@ function broadcast(room) {
     hostId: room.hostId,
     options: room.options,
     chat: room.chat.slice(-50),
-    members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, online: m.isBot || !!m.socketId, voice: m.voice || null })),
+    members: room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot, online: m.isBot || !!m.socketId, voice: m.voice || null, avatar: m.avatar || '' })),
     started: !!room.game,
     turnTime: TURN_TIME,
     deadlineIn: room.deadlineAt ? Math.max(0, room.deadlineAt - Date.now()) : null,
@@ -92,7 +100,7 @@ function scheduleBots(room) {
       console.error('Bot lỗi:', e);
       try { g.act(pi, { type: 'endTurn' }); } catch (_) { /* bỏ qua */ }
     }
-    broadcast(room);
+    try { broadcast(room); } catch (e) { console.error('Gửi trạng thái lỗi:', e); }
     scheduleBots(room);
   }, botDelay(room, g));
 }
@@ -114,8 +122,7 @@ function syncTimer(room) {
   room.deadlineAt = Date.now() + TURN_TIME;
   room.turnTimer = setTimeout(() => {
     if (room.game !== g || room.timerKey !== key) return;
-    try { g.timeout(pi); } catch (e) { console.error('Hết giờ lỗi:', e); }
-    broadcast(room);
+    try { g.timeout(pi); broadcast(room); } catch (e) { console.error('Hết giờ lỗi:', e); }
     scheduleBots(room);
   }, TURN_TIME);
 }
@@ -125,15 +132,26 @@ function stopTimer(room) {
   room.deadlineAt = null;
 }
 
+const IDLE_ROOM_MS = 10 * 60 * 1000;
+function deleteRoom(room) {
+  clearTimeout(room.botTimer);
+  stopTimer(room);
+  for (const m of room.members) if (playerRoom.get(m.id) === room.code) playerRoom.delete(m.id);
+  rooms.delete(room.code);
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    if (room.members.some((m) => !m.isBot && m.socketId)) { room.idleSince = null; continue; }
+    room.idleSince = room.idleSince || now;
+    if (now - room.idleSince > IDLE_ROOM_MS) deleteRoom(room);
+  }
+}, 60 * 1000).unref();
+
 function removeMember(room, id) {
   room.members = room.members.filter((m) => m.id !== id);
   playerRoom.delete(id);
-  if (!room.members.some((m) => !m.isBot)) {
-    clearTimeout(room.botTimer);
-    stopTimer(room);
-    rooms.delete(room.code);
-    return;
-  }
+  if (!room.members.some((m) => !m.isBot)) { deleteRoom(room); return; }
   if (room.hostId === id) room.hostId = room.members.find((m) => !m.isBot).id;
 }
 
@@ -148,18 +166,34 @@ function botify(room, id) {
     const h = room.members.find((x) => !x.isBot);
     if (h) room.hostId = h.id;
   }
-  if (!room.members.some((x) => !x.isBot)) { clearTimeout(room.botTimer); stopTimer(room); rooms.delete(room.code); return; }
+  if (!room.members.some((x) => !x.isBot)) { deleteRoom(room); return; }
   scheduleBots(room);
 }
 
 io.on('connection', (socket) => {
   let pid = null;
+  // Giới hạn tần suất mỗi kết nối: tối đa `max` sự kiện loại `kind` trong `ms`
+  const hits = {};
+  const limited = (kind, max, ms) => {
+    const now = Date.now();
+    const h = (hits[kind] = (hits[kind] || []).filter((t) => now - t < ms));
+    if (h.length >= max) return true;
+    h.push(now);
+    return false;
+  };
+  const LIMITS = { chat: [5, 5000], action: [20, 2000], 'voice:signal': [200, 5000] };
+  const on = (ev, fn) => socket.on(ev, (arg) => {
+    const lim = LIMITS[ev] || [30, 5000];
+    if (limited(ev, lim[0], lim[1])) return;
+    try { fn(arg && typeof arg === 'object' ? arg : (typeof arg === 'string' || typeof arg === 'boolean' ? arg : {})); }
+    catch (e) { console.error(`Lỗi xử lý "${ev}":`, e); }
+  });
   const getRoom = () => rooms.get(playerRoom.get(pid));
   // Thông báo lỗi song ngữ: client chọn theo ngôn ngữ đang dùng
   const err = (vi, en) => socket.emit('errorMsg', { vi, en: en || vi });
   const me = (room) => room.members.find((m) => m.id === pid);
 
-  socket.on('hello', ({ id }) => {
+  on('hello', ({ id }) => {
     pid = String(id || '').slice(0, 64) || socket.id;
     const room = getRoom();
     if (room && me(room)) {
@@ -169,17 +203,17 @@ io.on('connection', (socket) => {
     } else socket.emit('state', { you: pid, room: null, game: null });
   });
 
-  socket.on('create', ({ name }) => {
+  on('create', ({ name, avatar }) => {
     if (!pid || getRoom()) return;
     const code = newCode();
     const room = { code, hostId: pid, options: { target: 7, botSpeed: 'normal', castMode: 'random', chars: BASE_CAST.slice() }, chat: [], game: null,
-      members: [{ id: pid, name: cleanName(name), isBot: false, socketId: socket.id }] };
+      members: [{ id: pid, name: cleanName(name), isBot: false, socketId: socket.id, avatar: cleanAvatar(avatar) }] };
     rooms.set(code, room);
     playerRoom.set(pid, code);
     broadcast(room);
   });
 
-  socket.on('join', ({ code, name }) => {
+  on('join', ({ code, name, avatar }) => {
     if (!pid) return;
     const room = rooms.get(String(code || '').toUpperCase().trim());
     if (!room) return err('Không tìm thấy phòng', 'Room not found');
@@ -187,13 +221,13 @@ io.on('connection', (socket) => {
     if (!me(room)) {
       if (room.game) return err('Phòng đã bắt đầu chơi', 'This room has already started');
       if (room.members.length >= maxPlayers(room)) return err(`Phòng đã đủ ${maxPlayers(room)} người`, `The room is full (${maxPlayers(room)} players)`);
-      room.members.push({ id: pid, name: cleanName(name), isBot: false, socketId: socket.id });
+      room.members.push({ id: pid, name: cleanName(name), isBot: false, socketId: socket.id, avatar: cleanAvatar(avatar) });
       playerRoom.set(pid, room.code);
     } else me(room).socketId = socket.id;
     broadcast(room);
   });
 
-  socket.on('addBot', () => {
+  on('addBot', () => {
     const room = getRoom();
     if (!room || room.hostId !== pid || room.game) return;
     if (room.members.length >= maxPlayers(room)) return err(`Phòng đã đủ ${maxPlayers(room)} người`, `The room is full (${maxPlayers(room)} players)`);
@@ -203,7 +237,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('kick', ({ id }) => {
+  on('kick', ({ id }) => {
     const room = getRoom();
     if (!room || room.hostId !== pid || id === pid) return;
     const target = room.members.find((m) => m.id === id);
@@ -220,12 +254,12 @@ io.on('connection', (socket) => {
     if (rooms.has(room.code)) broadcast(room);
   });
 
-  socket.on('setOption', ({ target, botSpeed, chars, castMode }) => {
+  on('setOption', ({ target, botSpeed, chars, castMode }) => {
     const room = getRoom();
     if (!room || room.hostId !== pid) return;
     // Mục tiêu & bộ nhân vật chỉ đổi được ở phòng chờ; tốc độ bot đổi được cả khi đang chơi
     if (!room.game && [7, 8].includes(Number(target))) room.options.target = Number(target);
-    if (!room.game && ['random', 'custom'].includes(castMode)) {
+    if (!room.game && ['random', 'custom', 'jungle'].includes(castMode)) {
       if (castMode === 'custom' && room.members.length > 7 && !room.options.chars.some((k) => CHARACTERS[k].rank === 9)) {
         room.options.chars = randomCast(room.members.length); // 8 người: bộ tự chọn phải có số 9
       }
@@ -244,7 +278,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('start', () => {
+  on('start', () => {
     const room = getRoom();
     if (!room || room.hostId !== pid || room.game) return;
     if (room.members.length < 2) return err('Cần ít nhất 2 người chơi (có thể thêm bot)', 'At least 2 players are needed (you can add bots)');
@@ -252,12 +286,12 @@ io.on('connection', (socket) => {
     const chars = room.options.castMode === 'custom' ? room.options.chars : randomCast(room.members.length);
     const bad = castProblem(chars, room.members.length);
     if (bad) return err(bad.vi, bad.en);
-    room.game = new Game(room.members, { ...room.options, chars, secretCast: room.options.castMode !== 'custom' });
+    room.game = new Game(room.members, { ...room.options, chars, secretCast: room.options.castMode !== 'custom', reshuffle: room.options.castMode === 'jungle' });
     broadcast(room);
     scheduleBots(room);
   });
 
-  socket.on('action', (a) => {
+  on('action', (a) => {
     const room = getRoom();
     if (!room || !room.game || !a) return;
     const g = room.game;
@@ -274,7 +308,16 @@ io.on('connection', (socket) => {
     scheduleBots(room);
   });
 
-  socket.on('chat', (text) => {
+  // Đổi avatar trong phòng (phòng chờ hoặc đang chơi)
+  on('setAvatar', ({ avatar }) => {
+    const room = getRoom();
+    const m = room && me(room);
+    if (!m || m.isBot) return;
+    m.avatar = cleanAvatar(avatar);
+    broadcast(room);
+  });
+
+  on('chat', (text) => {
     const room = getRoom();
     const m = room && me(room);
     const t = String(text || '').trim().slice(0, 200);
@@ -286,7 +329,7 @@ io.on('connection', (socket) => {
 
   // ---- Thoại: server chỉ chuyển tiếp tín hiệu WebRTC giữa người cùng phòng, âm thanh đi thẳng giữa các trình duyệt ----
   // voice: null (không tham gia) | 'on' | 'muted'. Người mới vào gửi offer tới từng người đang trong thoại.
-  socket.on('voice:join', () => {
+  on('voice:join', () => {
     const room = getRoom();
     const m = room && me(room);
     if (!m || m.isBot || m.socketId !== socket.id) return;
@@ -295,7 +338,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('voice:mute', (muted) => {
+  on('voice:mute', (muted) => {
     const room = getRoom();
     const m = room && me(room);
     if (!m || !m.voice) return;
@@ -303,7 +346,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('voice:leave', () => {
+  on('voice:leave', () => {
     const room = getRoom();
     const m = room && me(room);
     if (!m || !m.voice) return;
@@ -312,7 +355,7 @@ io.on('connection', (socket) => {
   });
 
   // data: { sdp } hoặc { candidate } — chỉ chuyển cho người cùng phòng, cả hai đang trong thoại
-  socket.on('voice:signal', ({ to, data } = {}) => {
+  on('voice:signal', ({ to, data } = {}) => {
     const room = getRoom();
     const m = room && me(room);
     const target = room && room.members.find((x) => x.id === to);
@@ -321,7 +364,7 @@ io.on('connection', (socket) => {
     io.to(target.socketId).emit('voice:signal', { from: pid, data });
   });
 
-  socket.on('backToLobby', () => {
+  on('backToLobby', () => {
     const room = getRoom();
     if (!room || room.hostId !== pid || !room.game || room.game.phase !== 'ended') return;
     clearTimeout(room.botTimer);
@@ -330,7 +373,7 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  socket.on('leave', () => {
+  on('leave', () => {
     const room = getRoom();
     if (!room) return;
     if (me(room)) me(room).voice = null;

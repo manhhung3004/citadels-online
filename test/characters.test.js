@@ -338,7 +338,8 @@ test('bộ nhân vật bí mật: không bao giờ lộ tên nhân vật mà ng�
   const { CHARACTERS, randomCast } = require('../server/cards');
   for (let k = 0; k < 40; k++) {
     const n = 4 + (k % 5);
-    const g = new Game(Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}` })), { chars: randomCast(n), secretCast: true });
+    const jungle = k % 2 === 1; // Luật rừng NNHP: bộ nhân vật đổi mỗi vòng
+    const g = new Game(Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}` })), { chars: randomCast(n), secretCast: true, reshuffle: jungle });
     // Đầu ván: người chưa tới lượt chọn chỉ biết các lá lật ngửa
     const waiting = g.players.findIndex((_, i) => i !== g.currentActor());
     const v0 = g.viewFor(g.players[waiting].id);
@@ -347,7 +348,8 @@ test('bộ nhân vật bí mật: không bao giờ lộ tên nhân vật mà ng�
     while (g.phase !== 'ended' && steps++ < 3000) {
       for (const p of g.players) {
         const v = g.viewFor(p.id);
-        const json = JSON.stringify({ ...v, cast: null });
+        // Luật rừng: tên nhân vật của các vòng trước (nhật ký cũ, xem lại vòng trước) là thông tin hợp lệ, không nói gì về vòng này
+        const json = JSON.stringify(jungle ? { ...v, cast: null, lastRound: null, log: v.log.filter((e) => e.round === g.round) } : { ...v, cast: null });
         for (const [r, c] of Object.entries(v.cast)) {
           if (c) continue;
           // không lộ cả tên tiếng Việt lẫn tiếng Anh
@@ -445,4 +447,26 @@ test('hết giờ khi bị yểm bùa: chủ lá không nhận gì, Phù thủy 
   assert.equal(g.players[1].gold, 0);
   assert.equal(g.turn.pi, 0); // Phù thủy chơi tiếp, được thưởng Thương gia
   assert.equal(g.turn.rank, 6);
+});
+
+test('Luật rừng NNHP: mỗi vòng rút lại bộ nhân vật — luôn hợp lệ, có đổi qua các vòng, kiến thức vòng trước bị xóa', () => {
+  const { botAction } = require('../server/bot');
+  const { randomCast } = require('../server/cards');
+  const players = Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isBot: true }));
+  const g = new Game(players, { chars: randomCast(5), secretCast: true, reshuffle: true, target: 99 });
+  const casts = new Set();
+  let round = g.round;
+  for (let steps = 0; g.round < 8 && steps < 5000; steps++) {
+    if (g.round !== round) {
+      round = g.round;
+      assert.equal(castProblem(Object.values(g.cast), 5), null);
+      assert.equal(g.publicRanks.size, [...g.draft.faceUp].length); // chỉ còn các lá lật ngửa của vòng mới là công khai
+      assert.match(g.log.find((e) => e.round === round && /Luật rừng/.test(e.text)).text, /rút lại/);
+    }
+    casts.add(JSON.stringify(g.cast));
+    const pi = g.currentActor();
+    g.act(pi, botAction(g, pi));
+  }
+  assert.ok(g.round >= 8);
+  assert.ok(casts.size > 1, 'bộ nhân vật phải đổi ít nhất 1 lần sau 7 vòng');
 });
