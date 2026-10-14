@@ -77,7 +77,7 @@ Tổng giá công trình · +3 đủ 5 màu · điểm thưởng công trình t�
 - Thông tin công khai trong log: mục tiêu của Sát thủ và Kẻ trộm (theo nhân vật, như khi đọc to ở bàn thật).
 
 ## Chế độ bộ nhân vật (phòng chờ)
-- 🎲 Ngẫu nhiên mỗi ván (mặc định, bí mật) · ✋ Tự chọn (công khai) · 🌲 **Luật rừng NNHP**: mỗi vòng rút lại bộ nhân vật (mỗi số ngẫu nhiên 1 trong 3, `randomCast` nên luôn hợp lệ với số người), bí mật; đầu mỗi vòng quên kiến thức vòng trước (`publicRanks`, `seen`). Kho thuế giữ qua các vòng kể cả vòng không có Người thu thuế.
+- 🎲 Ngẫu nhiên mỗi ván (mặc định, bí mật) · ✋ Tự chọn (công khai) · 🌲 **Luật rừng NNHP**: mỗi vòng rút lại bộ nhân vật (mỗi số ngẫu nhiên 1 trong 3, `randomCast` nên luôn hợp lệ với số người), bí mật và **giấu kỹ**: chỉ biết số đã được gọi lộ diện + nhân vật của mình + các lá trong lúc đang chọn; lá thấy mà không lấy, lá bị loại đầu vòng đều "?"; nhật ký ghi "nhân vật số N" cho số chưa lộ diện (`hiddenRank`). Kho thuế giữ qua các vòng kể cả vòng không có Người thu thuế.
 
 ## Luật thêm của bản online: giới hạn thời gian
 - Mỗi bước của người thật (1 lần chọn / bỏ nhân vật, 1 lượt chơi) có 90 giây (`TURN_TIME` ghi đè khi test); bot không bị tính giờ.

@@ -1026,8 +1026,8 @@ function renderCastPicker(r, host) {
   const jungle = r.options.castMode === 'jungle';
   const mode = `<div class="row" style="margin-bottom:10px">${seg('castMode', { random: tx('🎲 Ngẫu nhiên mỗi ván', '🎲 Random each game'), jungle: tx('🌲 Luật rừng NNHP', '🌲 NNHP Jungle rule'), custom: tx('✋ Tự chọn', '✋ Custom') }, r.options.castMode || 'random', host)}
     <span class="muted" style="font-size:12.5px">${jungle
-    ? tx('Luật rừng NNHP: <b>mỗi vòng</b> rút lại bộ nhân vật — mỗi số ngẫu nhiên 1 trong 3 nhân vật, vòng sau có thể khác hẳn vòng trước.',
-      'NNHP Jungle rule: the character set is re-drawn <b>every round</b> — each rank gets 1 of its 3 characters at random, so every round can differ.')
+    ? tx('Luật rừng NNHP: <b>mỗi vòng</b> rút lại bộ nhân vật (mỗi số ngẫu nhiên 1 trong 3). Không ai biết số nào là nhân vật gì cho tới khi được gọi lộ diện — lá thấy lúc chọn mà không lấy, lá bị loại đầu vòng đều úp "?".',
+      'NNHP Jungle rule: the character set is re-drawn <b>every round</b> (each rank gets 1 of its 3 at random). Nobody knows which character a rank is until it is called and revealed — cards seen while picking but not taken, and cards removed at the start of the round, all stay "?".')
     : random
     ? tx('Mỗi lần bắt đầu ván, mỗi số được rút ngẫu nhiên 1 trong 3 nhân vật (số 9 có thể có hoặc không; luôn có khi đủ 8 người).',
       'At the start of each game, each rank gets 1 of its 3 characters at random (rank 9 may or may not be used; always used with 8 players).')
