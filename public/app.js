@@ -254,8 +254,12 @@ function sceneSvg(key, color) {
   return (sceneCache[id] = out);
 }
 
-function avatar(name, { isBot = false, online = null, id = name, voiceAct = false } = {}) {
-  const inner = isBot ? icon('robot') : esc(String(name).trim().charAt(0).toUpperCase() || '?');
+// Avatar chọn được: icon nhân vật (lưu trên máy + gửi server để mọi người cùng thấy); '' = chữ cái đầu tên
+const AVATARS = ['assassin', 'thief', 'magician', 'king', 'bishop', 'merchant', 'architect', 'warlord', 'witch', 'magistrate', 'spy', 'blackmailer', 'wizard', 'seer', 'emperor', 'abbot', 'alchemist', 'navigator', 'scholar', 'diplomat', 'marshal', 'artist', 'queen', 'taxcollector'];
+const getAvatar = () => { try { const a = localStorage.getItem('citadels-avatar') || ''; return AVATARS.includes(a) ? a : ''; } catch { return ''; } };
+const avatarOf = (id) => { const m = S.room && S.room.members.find((x) => x.id === id); return m ? m.avatar : (id === (S.you || myId) ? getAvatar() : ''); };
+function avatar(name, { isBot = false, online = null, id = name, voiceAct = false, av = avatarOf(id) } = {}) {
+  const inner = isBot ? icon('robot') : av && AVATARS.includes(av) ? icon(av) : esc(String(name).trim().charAt(0).toUpperCase() || '?');
   const dot = online === null ? '' : `<span class="on-dot ${online ? '' : 'off'}"></span>`;
   const speak = window.Voice && Voice.speaking.has(id) ? 'speaking' : '';
   return `<span class="avatar ${speak}" data-voice="${esc(id)}" style="--h:${hue(id)}">${inner}${dot}${voiceBadge(id, voiceAct)}</span>`;
@@ -357,27 +361,62 @@ if (window.Voice) {
 socket.on('disconnect', () => { ui.connected = false; toast(tx('Mất kết nối, đang thử lại...', 'Disconnected, reconnecting...')); render(); });
 // Lỗi từ server: chuỗi (cũ) hoặc { vi, en }
 socket.on('errorMsg', (m) => toast(typeof m === 'string' ? m : tx(m.vi, m.en || m.vi)));
+// Server chỉ gửi phần cuối nhật ký → gộp vào bộ nhớ theo ván (gameId) để vẫn xem được các vòng trước
+function mergeLog(g) {
+  if (!g) { ui.logCache = null; return; }
+  if (!ui.logCache || ui.logGameId !== g.gameId) { ui.logCache = new Map(); ui.logGameId = g.gameId; }
+  for (const e of g.log) ui.logCache.set(e.id, e);
+  // id tăng dần theo thứ tự ghi → Map giữ đúng thứ tự; giữ tối đa 800 dòng
+  if (ui.logCache.size > 800) for (const k of [...ui.logCache.keys()].slice(0, ui.logCache.size - 800)) ui.logCache.delete(k);
+  g.log = [...ui.logCache.values()];
+}
+
 socket.on('state', (s) => {
+  mergeLog(s.game);
   S = s;
   ui.deadline = s.room && s.room.deadlineIn != null ? Date.now() + s.room.deadlineIn : null;
   ui.turnTime = (s.room && s.room.turnTime) || 90000;
   if (window.Voice) Voice.sync(s.room ? s.room.members : null);
   const g = s.game;
   CHARS = g && g.cast ? castToChars(g.cast) : BASE_CHARS;
+  if (g && g.cast) {
+    if (ui.castGame !== g.gameId) { ui.castGame = g.gameId; ui.castByRound = {}; }
+    ui.castByRound[g.round] = g.cast;
+  }
   // Lượt mới (hoặc Phù thủy tiếp quản): xóa mọi lựa chọn dang dở
   const key = g ? `${g.round}-${g.phase}-${g.currentRank}-${g.turn ? g.turn.pi : ''}` : null;
-  if (key !== ui.turnKey) { ui.turnKey = key; ui.mode = null; ui.selected.clear(); ui.turnPopupHidden = false; ui.abilityPopup = false; ui.pick = {}; }
+  if (key !== ui.turnKey) { ui.turnKey = key; ui.turnSig = null; cancelAutoEnd(); ui.mode = null; ui.selected.clear(); ui.turnPopupHidden = false; ui.abilityPopup = false; ui.pick = {}; }
   // Kỹ năng đã dùng xong → thoát chế độ chọn ô công trình
   if (g && g.turn && g.turn.abilityUsed && ['warlord', 'marshal', 'diplomat', 'artist'].includes(ui.mode)) { ui.mode = null; ui.pick.dip = null; }
   // Mỗi lần tới lượt chọn nhân vật mới: bảng chọn tự bật lại
   const pickKey = g && g.draft && g.draft.options ? `${g.round}-${g.draft.idx}-${g.draft.awaitingDiscard}` : null;
-  if (pickKey !== ui.pickKey) { ui.pickKey = pickKey; ui.pickerHidden = false; }
+  if (pickKey !== ui.pickKey) { ui.pickKey = pickKey; ui.pickerHidden = false; if (pickKey && ui.pickKey0 !== undefined) buzz(); ui.pickKey0 = pickKey; }
   setTitle();
+  autoTurn(g);
   if (g) { trackChanges(g); announce(g); sfxFor(g); markFreshLog(g); } else { ui.prevGold = {}; ui.prevCity = null; ui.lastLogId = null; }
   sfxChat(s.room);
   render();
   if (g) flyCoins(g);
 });
+
+// Rung nhẹ khi tới lượt mình (điện thoại hỗ trợ; iOS Safari bỏ qua)
+const buzz = () => { try { if (navigator.vibrate) navigator.vibrate([90, 50, 90]); } catch { /* bỏ qua */ } };
+
+// ---------- Cỡ giao diện: màn lớn tự thu nhỏ (như zoom trình duyệt ~75% trên màn Full HD) ----------
+// Dùng CSS zoom cho cả trang. Tọa độ chuột / getBoundingClientRect là pixel thật trên màn, còn px gán cho phần tử
+// bị nhân với zoom → mọi chỗ "đo rồi đặt vị trí" phải chia cho UIZ (placeTray, kéo lá, xu bay, độ rộng quạt bài).
+let UIZ = 1;
+function applyUiZoom() {
+  const z = window.innerWidth >= 1021 ? Math.max(0.72, Math.min(1, 1440 / window.innerWidth)) : 1;
+  // Chiều cao màn hình tính theo px đã zoom: CSS màn rộng dùng var(--vh100) thay cho 100vh (vh bị zoom làm co lại)
+  document.documentElement.style.setProperty("--vh100", `${window.innerHeight / z}px`);
+  if (Math.abs(z - UIZ) < 0.005) return false;
+  UIZ = z;
+  document.documentElement.style.zoom = z === 1 ? '' : z.toFixed(3);
+  return true;
+}
+applyUiZoom();
+window.addEventListener('resize', () => { if (applyUiZoom() && S.room) render(); });
 
 // ---------- Âm thanh (public/sfx.js) ----------
 const sfx = (name, delay) => window.Sfx && Sfx.play(name, delay);
@@ -437,7 +476,7 @@ function coinTrip(from, to, i, fade) {
 
 function flyCoins(g) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const center = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + 14, y: r.top + r.height / 2 - 9 }; };
+  const center = (el) => { const r = el.getBoundingClientRect(); return { x: (r.left + 14) / UIZ, y: (r.top + r.height / 2 - 9) / UIZ }; };
   const chips = {};
   // Chỉ nhắm tới ô vàng đang hiển thị (ô thông tin có thể bị ẩn theo kích thước màn hình)
   document.querySelectorAll('[data-gold]').forEach((el) => { if (el.offsetParent) chips[el.dataset.gold] = el; });
@@ -535,6 +574,77 @@ document.addEventListener('click', (e) => {
   hov.x = e.clientX; hov.y = e.clientY;
   setHov(card);
 }, true);
+// Bảng chọn avatar (trang chủ & phòng chờ): 24 icon nhân vật + chữ cái đầu tên
+function renderAvatarPick() {
+  if (!ui.avatarPick) return '';
+  const cur = S.room ? avatarOf(S.you) : getAvatar();
+  const name = (S.room && (S.room.members.find((m) => m.id === S.you) || {}).name) || getName() || '?';
+  const opt = (av, label) => `<button class="av-opt ${cur === av ? 'on' : ''}" data-act="setAvatar" data-av="${av}" title="${esc(label)}" aria-label="${esc(label)}">${avatar(name, { id: S.you || myId, av })}</button>`;
+  const data = charData() || [];
+  const label = (k) => { const c = data.find((x) => x.key === k); return c ? cName(c) : k; };
+  return `<div class="sheet-bg av-bg" data-act="avatarPick"><div class="av-pick" data-act="sheetStay">
+    <div class="sh-head"><b>${tx('Chọn avatar', 'Choose an avatar')}</b><span class="muted">${tx('mọi người trong phòng đều thấy', 'everyone in the room sees it')}</span>
+      <button class="small ghost sh-x" data-act="avatarPick" aria-label="${tx('Đóng', 'Close')}">✕</button></div>
+    <div class="av-grid">${opt('', tx('Chữ cái đầu tên', 'Name initial'))}${AVATARS.map((k) => opt(k, label(k))).join('')}</div></div></div>`;
+}
+
+// Kéo lá bài lên bàn để xây (chuột & cảm ứng): nhấn lá đang sáng (xây được), kéo lên khỏi khay bài, thả → xây.
+// Ít bấm hơn và không bị chạm nhầm lá bên cạnh như khi chạm 2 lần trong quạt bài. Bấm như cũ vẫn xây được.
+const drag = { el: null, id: null, pid: null, x0: 0, y0: 0, on: false, ghost: null, hint: null, ok: false, dx: 0, dy: 0, until: 0 };
+const dropLine = () => { const f = $('.hand-tray .fan'); return f ? f.getBoundingClientRect().top - 24 : window.innerHeight * 0.6; };
+function dragStart(e) {
+  const r = drag.el.getBoundingClientRect();
+  drag.dx = e.clientX - r.left; drag.dy = e.clientY - r.top;
+  const g = drag.el.cloneNode(true);
+  g.classList.remove('hov', 'snap');
+  g.classList.add('drag-ghost');
+  g.style.width = `${r.width / UIZ}px`;
+  document.body.appendChild(g);
+  drag.ghost = g;
+  drag.el.classList.add('dragging');
+  const tag = drag.el.querySelector('.tag');
+  drag.hint = document.createElement('div');
+  drag.hint.className = 'drop-hint';
+  drag.hint.textContent = tx(`⬆ Thả lên bàn để xây${tag ? ' · ' + tag.textContent.replace(/^\D*/, '').replace(/\)$/, '') : ''}`, `⬆ Drop on the table to build${tag ? ' · ' + tag.textContent.replace(/^\D*/, '').replace(/\)$/, '') : ''}`);
+  document.body.appendChild(drag.hint);
+  document.body.classList.add('drag-build');
+  setHov(null);
+}
+function dragMove(e) {
+  drag.ghost.style.transform = `translate(${(e.clientX - drag.dx) / UIZ}px, ${(e.clientY - drag.dy) / UIZ}px) rotate(-3deg) scale(1.04)`;
+  drag.ok = e.clientY < dropLine();
+  drag.ghost.classList.toggle('ok', drag.ok);
+  drag.hint.classList.toggle('ok', drag.ok);
+}
+function dragEnd(commit) {
+  if (drag.on) {
+    drag.ghost.remove(); drag.hint.remove();
+    document.body.classList.remove('drag-build');
+    if (drag.el) drag.el.classList.remove('dragging');
+    drag.until = Date.now() + 400; // chặn cú click ngay sau khi thả (không mở xem / không xây 2 lần)
+    if (commit && drag.ok) send('build', { cardId: Number(drag.id) });
+  }
+  drag.el = null; drag.on = false; drag.ok = false;
+}
+document.addEventListener('pointerdown', (e) => {
+  const card = e.target.closest && e.target.closest('.hand-tray .fan .dcard.playable');
+  if (!card || e.button > 0) return;
+  Object.assign(drag, { el: card, id: card.dataset.id, pid: e.pointerId, x0: e.clientX, y0: e.clientY, on: false, ok: false });
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (!drag.el || e.pointerId !== drag.pid) return;
+  if (!drag.on) {
+    const up = drag.y0 - e.clientY;
+    if (up < 12 || Math.abs(e.clientX - drag.x0) > up * 1.5) return; // chưa kéo lên đủ / đang vuốt ngang
+    drag.on = true;
+    dragStart(e);
+  }
+  dragMove(e);
+}, { passive: true });
+document.addEventListener('pointerup', (e) => { if (drag.el && e.pointerId === drag.pid) dragEnd(true); });
+document.addEventListener('pointercancel', () => { if (drag.el) dragEnd(false); });
+window.addEventListener('click', (e) => { if (Date.now() < drag.until) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+
 // Cuộn trang: vị trí gốc đã đổi → đo lại
 window.addEventListener('scroll', () => { if (hov.el) { const el = hov.el; setHov(null); if (hov.x >= 0) updateHov(); else el.classList.remove('hov'); } }, { passive: true, capture: true });
 
@@ -598,6 +708,7 @@ function announce(g) {
   ui.announceKey = key;
   if (first) return; // không phát lại khi vừa tải trang
   sfx(g.phase === 'draft' ? 'round' : g.phase === 'ended' ? 'finish' : g.turn.pi === g.me ? 'turn' : 'reveal');
+  if (g.phase === 'turns' && g.turn.pi === g.me) buzz();
   $('#overlay').innerHTML = html;
   clearTimeout(announce.timer);
   announce.timer = setTimeout(() => { $('#overlay').innerHTML = ''; }, 2300);
@@ -704,6 +815,14 @@ function render() {
   equalCards();
   restoreHov();
   sync3d();
+  // Đổi màn (trang chủ → phòng chờ → vào ván / ván mới → về phòng chờ): luôn về đầu trang,
+  // không giữ chỗ cuộn của màn trước (vd. bấm "Bắt đầu" ở cuối phòng chờ → màn chơi mở lưng chừng)
+  const screen = S.game ? `game-${S.game.gameId}` : S.room ? 'lobby' : 'home';
+  if (screen !== ui.screen) {
+    ui.screen = screen;
+    window.scrollTo(0, 0);
+    updateTray();
+  }
 }
 
 // Khay bài thu gọn khi bàn 3D ra khỏi tầm nhìn (cuộn xuống xem thành phố): chỉ còn viên "Bài trên tay",
@@ -753,8 +872,8 @@ function placeTray() {
   if (!tray || !main) return;
   if (window.innerWidth >= 1021) {
     const r = main.getBoundingClientRect();
-    tray.style.left = `${r.left}px`;
-    tray.style.width = `${r.width}px`;
+    tray.style.left = `${r.left / UIZ}px`;
+    tray.style.width = `${r.width / UIZ}px`;
     tray.style.right = 'auto';
   } else {
     tray.style.left = tray.style.width = tray.style.right = '';
@@ -770,9 +889,9 @@ function sync3d() {
   const marks = skillMarks(g);
   City3D.update(g, {
     lang: ui.lang,
-    label: (p, i) => `<div class="c3-n">${p.hasCrown ? `<span class="c3-crown">${icon('king')}</span>` : ''}<b>${esc(p.name)}</b>${i === g.me ? `<em>${tx('bạn', 'you')}</em>` : ''}</div>
+    label: (p, i) => `<div class="c3-hit" data-act="cityOf" data-pi="${i}" title="${tx('Xem thành phố', 'View city')}"><div class="c3-n">${p.hasCrown ? `<span class="c3-crown">${icon('king')}</span>` : ''}<b>${esc(p.name)}</b>${i === g.me ? `<em>${tx('bạn', 'you')}</em>` : ''}</div>
       <div class="c3-s"><span title="${tx('Vàng', 'Gold')}">${icon('gold')}${p.gold}</span><span>${icon('cards')}${p.handCount}</span><span>${icon('city')}${p.citySize ?? p.city.length}/${g.target}</span></div>
-      ${p.chars.length ? `<div class="c3-ch">${p.chars.map((c) => medal(c, 'xs')).join('')}</div>` : ''}`,
+      ${p.chars.length ? `<div class="c3-ch">${p.chars.map((c) => medal(c, 'xs')).join('')}</div>` : ''}</div>`,
     destroyable: marks,
     onDestroy: (target, cardId) => {
       const m = marks.find((x) => x.cardId === cardId);
@@ -795,8 +914,10 @@ function renderStage(g) {
   const live = g.phase !== 'ended';
   const on = supported && ui.show3d;
   const action = `<div class="action ${live ? 'slim' : ''} ${on && live ? 'stage-action' : ''}">${renderAction()}</div>`;
-  if (!supported) return action;
-  const tools = `<div class="stage-tools">
+  if (!supported) return `${action}<div class="stage off"><div class="stage-tools">${sheets}</div></div>`;
+  const sheets = `<button class="small tool3d sheet-btn" data-act="sheet" data-val="cities" title="${tx('Thành phố người chơi', 'Players\' cities')}">${icon('city')}<span class="tb-l">${tx('Thành phố', 'Cities')}</span></button>
+    <button class="small tool3d sheet-btn" data-act="sheet" data-val="log" title="${tx('Nhật ký', 'Log')}">${icon('scroll')}<span class="tb-l">${tx('Nhật ký', 'Log')}</span></button>`;
+  const tools = `<div class="stage-tools">${sheets}
     ${on ? `<button class="small tool3d" data-act="reset3d" title="${tx('Góc nhìn ban đầu · kéo để xoay, cuộn chuột để phóng to', 'Reset view · drag to rotate, scroll to zoom')}" aria-label="${tx('Góc nhìn ban đầu', 'Reset view')}">↺</button>` : ''}
     <button class="small tool3d" data-act="toggle3d" title="${on ? tx('Tắt bàn 3D', 'Turn the 3D table off') : tx('Bật bàn 3D', 'Turn the 3D table on')}">${on ? '3D ✕' : '3D'}</button></div>`;
   const modeHint = MODE_HINT[ui.mode] && TILE_MODE[g.turn && g.turn.key] === ui.mode ? `<div class="stage-hint">${tx(...MODE_HINT[ui.mode])}</div>` : '';
@@ -820,7 +941,8 @@ function renderHome() {
     <div>
       <div class="box form">
         <label for="name">${tx('Tên của bạn', 'Your name')}</label>
-        <input id="name" maxlength="20" placeholder="${tx('Nhập tên...', 'Enter your name...')}" value="${esc(getName())}">
+        <div class="name-row"><button class="av-btn" data-act="avatarPick" title="${tx('Đổi avatar', 'Change avatar')}" aria-label="${tx('Đổi avatar', 'Change avatar')}">${avatar(getName() || '?', { id: myId, av: getAvatar() })}<i>✎</i></button>
+          <input id="name" maxlength="20" placeholder="${tx('Nhập tên...', 'Enter your name...')}" value="${esc(getName())}"></div>
         <button class="primary big" data-act="create">${icon('logo')} ${tx('Tạo phòng mới', 'Create a room')}</button>
         <div class="or">${tx('hoặc vào phòng có sẵn', 'or join an existing room')}</div>
         <div class="row"><input id="code" maxlength="4" placeholder="${tx('Mã phòng', 'Room code')}" value="${esc(code)}" style="flex:1;text-transform:uppercase;letter-spacing:.15em">
@@ -828,7 +950,7 @@ function renderHome() {
       </div>
       ${rulesHtml()}
     </div>
-  </div>${credit()}`;
+  </div>${credit()}${renderAvatarPick()}`;
 }
 
 function rulesHtml() {
@@ -901,8 +1023,12 @@ function renderCastPicker(r, host) {
   const data = charData();
   if (!data) return `<div class="muted">${tx('Đang tải danh sách nhân vật…', 'Loading characters…')}</div>`;
   const random = r.options.castMode !== 'custom';
-  const mode = `<div class="row" style="margin-bottom:10px">${seg('castMode', { random: tx('🎲 Ngẫu nhiên mỗi ván', '🎲 Random each game'), custom: tx('✋ Tự chọn', '✋ Custom') }, random ? 'random' : 'custom', host)}
-    <span class="muted" style="font-size:12.5px">${random
+  const jungle = r.options.castMode === 'jungle';
+  const mode = `<div class="row" style="margin-bottom:10px">${seg('castMode', { random: tx('🎲 Ngẫu nhiên mỗi ván', '🎲 Random each game'), jungle: tx('🌲 Luật rừng NNHP', '🌲 NNHP Jungle rule'), custom: tx('✋ Tự chọn', '✋ Custom') }, r.options.castMode || 'random', host)}
+    <span class="muted" style="font-size:12.5px">${jungle
+    ? tx('Luật rừng NNHP: <b>mỗi vòng</b> rút lại bộ nhân vật — mỗi số ngẫu nhiên 1 trong 3 nhân vật, vòng sau có thể khác hẳn vòng trước.',
+      'NNHP Jungle rule: the character set is re-drawn <b>every round</b> — each rank gets 1 of its 3 characters at random, so every round can differ.')
+    : random
     ? tx('Mỗi lần bắt đầu ván, mỗi số được rút ngẫu nhiên 1 trong 3 nhân vật (số 9 có thể có hoặc không; luôn có khi đủ 8 người).',
       'At the start of each game, each rank gets 1 of its 3 characters at random (rank 9 may or may not be used; always used with 8 players).')
     : tx('Bấm để chọn nhân vật cho từng số.', 'Click to choose a character for each rank.')}</span></div>`;
@@ -968,7 +1094,8 @@ function renderLobby() {
   const issue = custom && charData() ? castIssue(r.options.chars || [], r.members.length) : null;
   const link = `${location.origin}${location.pathname}?room=${r.code}`;
   const seats = r.members.map((m) => `<div class="seat">
-      ${avatar(m.name, { isBot: m.isBot, online: m.online, id: m.id, voiceAct: true })}
+      ${m.id === S.you ? `<button class="av-btn" data-act="avatarPick" title="${tx('Đổi avatar', 'Change avatar')}" aria-label="${tx('Đổi avatar', 'Change avatar')}">${avatar(m.name, { online: m.online, id: m.id, voiceAct: true })}<i>✎</i></button>`
+        : avatar(m.name, { isBot: m.isBot, online: m.online, id: m.id, voiceAct: true })}
       <div class="grow"><div class="nm">${esc(m.name)}</div>
         <div class="muted" style="font-size:12px">${m.id === r.hostId ? tx('Chủ phòng', 'Host') : m.isBot ? 'Bot' : tx('Người chơi', 'Player')}${m.id === S.you ? tx(' · Bạn', ' · You') : ''}</div></div>
       ${host && m.id !== S.you ? `<button class="small ghost danger" data-act="kick" data-id="${m.id}" title="${tx('Mời ra', 'Kick')}">✕</button>` : ''}
@@ -997,7 +1124,7 @@ function renderLobby() {
         : `<span class="muted">${waitDots} ${tx('Đang chờ chủ phòng bắt đầu', 'Waiting for the host to start')}</span>`}
       </div>
     </div>
-  </div>${credit()}${renderChatPop()}`;
+  </div>${credit()}${renderChatPop()}${renderAvatarPick()}`;
 }
 
 function renderGame() {
@@ -1010,18 +1137,48 @@ function renderGame() {
       ${renderRoundBar()}
       ${g.phase !== 'ended' ? `<div class="main-hud">${renderMeHud(g)}</div>` : ''}
       ${renderStage(g)}
-      <div class="players-panel"><div class="section-title">${tx('Thành phố', 'Cities')}</div>
-        <div class="players">${g.players.map((p, i) => renderPlayer(p, i)).join('')}</div></div>
     </div>
     <div class="side">
-      <div class="panel"><div class="log-head"><div class="section-title">${tx('Nhật ký', 'Log')}</div>
-        <div class="seg">${[['all', tx('Tất cả', 'All')], ['key', tx('Quan trọng', 'Key events')]].map(([v, l]) =>
-          `<button class="${ui.logFilter === v ? 'on' : ''}" data-act="logFilter" data-val="${v}">${l}</button>`).join('')}</div></div>
-        ${renderLog()}</div>
+      ${WIDE.matches ? renderSideTabs(g) : ''}
       ${renderLastRound()}
       ${renderMeHud(g)}
     </div>
-  </div>${credit()}${g.phase !== 'ended' ? renderHand() : ''}${renderChatPop()}${renderPicker()}${renderTurnPopup()}${renderClock()}`;
+  </div>${credit()}${g.phase !== 'ended' ? renderHand() : ''}${renderChatPop()}${renderPicker()}${renderTurnPopup()}${renderClock()}${WIDE.matches ? '' : renderSheet(g)}`;
+}
+
+// Màn rộng: cột phải có 2 tab Thành phố / Nhật ký (mặc định Thành phố — trước đây thành phố nằm tít dưới, không ai cuộn xuống xem).
+// Màn hẹp: 2 nút trên bàn 3D mở bảng trượt từ dưới lên (renderSheet). Chạm bảng tên người chơi trên bàn 3D → mở thành phố người đó.
+const WIDE = matchMedia('(min-width: 1021px)');
+WIDE.addEventListener('change', () => { ui.sheet = null; render(); });
+const logSeg = () => `<div class="seg">${[['all', tx('Tất cả', 'All')], ['key', tx('Quan trọng', 'Key events')]].map(([v, l]) =>
+  `<button class="${ui.logFilter === v ? 'on' : ''}" data-act="logFilter" data-val="${v}">${l}</button>`).join('')}</div>`;
+const cityList = (g) => g.players.map((p, i) => `<div class="cc-item ${ui.cityFocus === i ? 'focus' : ''}" data-pi="${i}">${renderPlayer(p, i)}</div>`).join('');
+function renderSideTabs(g) {
+  const tab = ui.sideTab || null;
+  const tabs = [['cities', `${icon('city')} ${tx('Thành phố', 'Cities')}`], ['log', `${icon('scroll')} ${tx('Nhật ký', 'Log')}`]];
+  return `<div class="panel side-tabs"><div class="st-head">${tabs.map(([k, l]) => `<button class="st-tab ${tab === k ? 'on' : ''}" data-act="sideTab" data-val="${k}">${l}</button>`).join('')}
+    ${tab === 'log' ? logSeg() : ''}</div>
+    ${tab === 'log' ? renderLog() : tab === 'cities' ? `<div class="city-list">${cityList(g)}</div>` : ''}</div>`;
+}
+function renderSheet(g) {
+  if (!ui.sheet) return '';
+  const close = `<button class="small ghost sh-x" data-act="sheet" data-val="" aria-label="${tx('Đóng', 'Close')}">✕</button>`;
+  const body = ui.sheet === 'log'
+    ? `<div class="sh-head"><b>${icon('scroll')} ${tx('Nhật ký', 'Log')}</b>${logSeg()}${close}</div>${renderLog()}`
+    : `<div class="sh-head"><b>${icon('city')} ${tx('Thành phố', 'Cities')}</b><span class="muted">${tx('vuốt ngang để xem từng người', 'swipe to see each player')}</span>${close}</div>
+      <div class="city-carousel">${cityList(g)}</div>`;
+  return `<div class="sheet-bg" data-act="sheet" data-val=""><div class="sheet sh-${ui.sheet}" data-act="sheetStay">${body}</div></div>`;
+}
+// Mở thành phố của 1 người (từ bảng tên trên bàn 3D)
+function openCity(pi) {
+  ui.cityFocus = pi;
+  if (WIDE.matches) ui.sideTab = 'cities'; else ui.sheet = 'cities';
+  render();
+  const el = $(`.cc-item[data-pi="${pi}"]`);
+  const box = el && el.parentElement;
+  if (!box) return;
+  if (box.classList.contains('city-carousel')) box.scrollLeft = el.offsetLeft - box.offsetLeft - 12;
+  else box.scrollTop = el.offsetTop - box.offsetTop - 8;
 }
 
 // ---------- Nhật ký: nhóm theo vòng → theo lượt nhân vật, tô màu theo loại sự kiện ----------
@@ -1084,12 +1241,21 @@ function logLine(e) {
     <span class="lg-ic">${ic ? icon(ic) : '•'}</span><span>${fmt(logText(e))}</span></div>`;
 }
 
+// Vẽ phần thuộc vòng `round` bằng đúng bộ nhân vật của vòng đó (Luật rừng NNHP đổi bộ mỗi vòng)
+function withCast(round, fn) {
+  const c = ui.castByRound && ui.castByRound[round];
+  if (!c || c === S.game.cast) return fn();
+  const prev = CHARS;
+  CHARS = castToChars(c);
+  try { return fn(); } finally { CHARS = prev; }
+}
+
 function renderLog() {
   const g = S.game;
   const keyOnly = ui.logFilter === 'key';
   const show = (e) => !keyOnly || !['info', 'muted'].includes(e.tone);
   const rounds = groupLog(g.log);
-  const html = rounds.map((R, idx) => {
+  const html = rounds.map((R, idx) => withCast(R.round, () => {
     const last = idx === rounds.length - 1;
     const open = ui.logOpen[R.round] ?? last;
     const sum = [
@@ -1114,7 +1280,7 @@ function renderLog() {
       ${R.head ? `<div class="lg-head">${icon('king')} <span>${fmt(logText(R.head))}</span></div>` : ''}
       ${R.pre.filter(show).map(logLine).join('')}${turns}${R.post.filter(show).map(logLine).join('')}
     </details>`;
-  }).join('');
+  })).join('');
   return `<div class="log">${html}</div>`;
 }
 
@@ -1129,7 +1295,7 @@ function renderRoundBar() {
     : tx('Nhân vật số nhỏ chơi trước. Đến số nào, người cầm nhân vật đó lộ diện và chơi lượt của mình. Chạm vào huy hiệu để xem chi tiết.',
       'Lower ranks play first. When a rank is called, its holder reveals themselves and plays their turn. Tap a medal for details.');
   const head = `<div class="rb-head">
-    <span class="rb-round">${tx('Vòng', 'Round')} ${g.round}</span>
+    <span class="rb-round">${tx('Vòng', 'Round')} ${g.round}</span>${S.room.options.castMode === 'jungle' ? `<span class="rb-jungle" title="${tx('Luật rừng NNHP: mỗi vòng rút lại bộ nhân vật', 'NNHP Jungle rule: the character set is re-drawn every round')}">🌲 <span class="tb-l">NNHP</span></span>` : ''}
     <span class="ph ${draft ? 'on' : 'done'}"><b>${draft ? '1' : '✔'}</b>${tx('Chọn', 'Pick')}</span>
     <span class="ph-arrow">›</span>
     <span class="ph ${draft ? '' : 'on'}"><b>2</b>${tx('Gọi', 'Call')} 1→${g.maxRank || 8}</span>
@@ -1220,11 +1386,11 @@ function renderLastRound() {
   const g = S.game;
   const lr = g.lastRound;
   if (!lr || (g.phase !== 'draft' && g.phase !== 'ended')) return '';
-  const rows = lr.history.filter((h) => h.status !== 'none').map((h) => {
+  const rows = withCast(lr.round, () => lr.history.filter((h) => h.status !== 'none').map((h) => {
     const who = h.pi !== null ? esc(g.players[h.pi].name) : '?';
     const what = h.status === 'killed' ? tx('💀 bị ám sát, mất lượt', '💀 assassinated, turn lost') : h.events.length ? esc(histEvents(h).join(' · ')) : tx('không làm gì thêm', 'nothing else');
     return `<div class="lr-row">${medal(h.rank, 'sm')}<div><b>${who}</b> <span class="muted">— ${chName(h.rank)}</span><div class="lr-ev">${what}</div></div></div>`;
-  }).join('');
+  }).join(''));
   // Thu gọn mặc định & ghi rõ "đã kết thúc" để không bị nhầm là nhân vật của vòng hiện tại
   return `<details class="panel lastround" ${ui.lastRoundOpen ? 'open' : ''} data-toggle="lastRound">
     <summary class="section-title">${tx(`Xem lại vòng ${lr.round}`, `Review round ${lr.round}`)} <span class="hint">· ${tx('đã kết thúc', 'finished')}</span></summary>
@@ -1336,7 +1502,7 @@ function renderHand() {
   let hint = '';
   if (ui.mode === 'redraw') hint = tx('Chọn các lá muốn bỏ để rút lại', 'Select the cards to discard and redraw');
   else if (ui.mode === 'lab') hint = tx('Chọn 1 lá để bỏ (nhận 2 vàng)', 'Choose 1 card to discard (gain 2 gold)');
-  else if (canBuild) hint = tx(`Bấm vào lá bài để xây · đã xây ${t.builds}/${t.maxBuilds}`, `Click a card to build · built ${t.builds}/${t.maxBuilds}`);
+  else if (canBuild) hint = tx(`⬆ Kéo lá lên bàn để xây · ${t.builds}/${t.maxBuilds}`, `⬆ Drag a card onto the table to build · ${t.builds}/${t.maxBuilds}`);
   else if (myTurn && !t.actionTaken) hint = tx('Lấy vàng hoặc rút bài trước khi xây', 'Take gold or draw cards before building');
 
   // Xòe bài hình quạt: các lá chồng lên nhau, nghiêng dần ra hai bên
@@ -1346,7 +1512,7 @@ function renderHand() {
   const wide = window.innerWidth >= 1021;
   const dock = renderDock(g);
   const mainEl = $('.main');
-  const trayW = wide ? (mainEl ? mainEl.getBoundingClientRect().width : window.innerWidth - 414) : window.innerWidth;
+  const trayW = (wide ? (mainEl ? mainEl.getBoundingClientRect().width : window.innerWidth - 414) : window.innerWidth) / UIZ;
   const zf = LANDSCAPE_PHONE.matches ? 0.68 : 1; // khớp với CSS (.fan scale) khi điện thoại xoay ngang
   const dockW = dock ? (wide ? 330 : zf < 1 ? 236 : 0) : 0; // thanh điều khiển nằm cạnh quạt bài
   const maxW = Math.min(trayW - dockW - 40, 1000) / zf;
@@ -1401,7 +1567,7 @@ function turnPopupMode(g) {
   if (t.threat && t.actionTaken) return 'threat';
   if (ui.pick.dip && ui.mode === 'diplomat') return 'diplomat';
   if (ui.abilityPopup && !t.abilityUsed) return 'ability';
-  if (!t.actionTaken && !ui.turnPopupHidden) return 'resource';
+  if (!ui.turnPopupHidden && !ui.mode) return 'main';
   return null;
 }
 
@@ -1476,6 +1642,59 @@ function abilityPopup(g, t) {
   }
 }
 
+function skillOff(g, t) {
+  const me = g.players[g.me];
+  const marks = { warlord: g.destroyable, marshal: g.seizable, diplomat: g.swappable }[t.key];
+  if (t.threat) return tx('Xử lý thư đe dọa trước', 'Resolve the threat first');
+  if (marks && !marks.length) return tx('Không có mục tiêu hợp lệ', 'No valid target');
+  if (t.key === 'artist' && (me.gold < 1 || !me.city.some((c) => !c.beauty))) return tx('Cần 1 vàng và công trình chưa trang trí', 'Needs 1 gold and an undecorated district');
+  if (t.key === 'witch' && !t.actionTaken) return tx('Nhận tài nguyên trước', 'Gather resources first');
+  if (t.key === 'abbot' && !(g.targets.abbot || []).length) return tx('Bạn đang là người giàu nhất', 'You are the richest player');
+  return '';
+}
+// Việc còn làm được trong lượt của mình ([] = đã xong hết → tự kết thúc lượt)
+function turnLeft(g) {
+  const t = g.turn;
+  const me = g.players[g.me];
+  const has = (k) => me.city.some((c) => c.key === k);
+  const left = [];
+  if (!t.actionTaken || t.choosing || t.drawn || t.peek || (t.seerGive && t.seerGive.length) || t.threat) left.push('step');
+  if (SKILL[t.key] && !t.abilityUsed && !t.bewitched && !skillOff(g, t)) left.push('ability');
+  if (t.key === 'emperor' && !t.abilityUsed) left.push('crown');
+  // Thu thuế được chọn vàng hay lá: để người chơi chọn (tự kết thúc sẽ lấy mặc định)
+  if (!t.incomeTaken && CHARS[t.rank] && CHARS[t.rank].income === 'choose' && me.city.some((c) => c.color === CHARS[t.rank].color || c.key === 'magicschool')) left.push('income');
+  if (t.maxBuilds && t.builds < t.maxBuilds && g.hand.some((c) => g.costs && g.costs[c.id] && !g.costs[c.id].why)) left.push('build');
+  if (has('laboratory') && !t.labUsed && g.hand.length) left.push('lab');
+  if (has('smithy') && !t.smithyUsed && me.gold >= 2) left.push('smithy');
+  return left;
+}
+// Gọi mỗi lần nhận trạng thái (trước render): xong hết → đếm 1.6 giây rồi tự kết thúc lượt (bấm "Ở lại" để hủy);
+// vừa làm xong 1 việc mà vẫn còn việc → mở lại bảng lượt cho người chơi làm tiếp
+const AUTO_END_MS = 1600;
+function autoTurn(g) {
+  const t = g && g.turn;
+  if (!g || g.phase !== 'turns' || !t || t.pi !== g.me) { cancelAutoEnd(); ui.turnSig = null; return; }
+  const left = turnLeft(g);
+  const sig = `${t.actionTaken}|${t.builds}|${t.abilityUsed}|${t.labUsed}|${t.smithyUsed}|${t.incomeTaken}|${g.hand.length}`;
+  if (!left.length && ui.autoEndStay !== ui.turnKey && !ui.mode) {
+    ui.turnPopupHidden = true; // cho thấy bàn chơi trong lúc đếm
+    if (!ui.autoEndAt) {
+      ui.autoEndAt = Date.now() + AUTO_END_MS;
+      const key = ui.turnKey;
+      ui.autoEndTimer = setTimeout(() => {
+        ui.autoEndAt = null;
+        const g2 = S.game;
+        if (g2 && ui.turnKey === key && ui.autoEndStay !== key && g2.turn && g2.turn.pi === g2.me && !turnLeft(g2).length) { send('endTurn'); render(); }
+      }, AUTO_END_MS);
+    }
+  } else {
+    cancelAutoEnd();
+    if (left.length && ui.turnSig && ui.turnSig !== sig && !ui.mode) ui.turnPopupHidden = false;
+  }
+  ui.turnSig = sig;
+}
+function cancelAutoEnd() { clearTimeout(ui.autoEndTimer); ui.autoEndTimer = null; ui.autoEndAt = null; }
+
 function renderTurnPopup() {
   const g = S.game;
   const mode = turnPopupMode(g);
@@ -1493,23 +1712,59 @@ function renderTurnPopup() {
   let extra = '';
   let foot = '';
 
-  if (mode === 'resource') {
+  if (mode === 'main') {
     const has = (k) => me.city.some((c) => c.key === k);
-    const nDraw = has('observatory') ? 3 : 2;
-    const nKeep = has('library') ? nDraw : 1; // Thư viện: giữ tất cả
-    const nGold = has('goldmine') ? 3 : 2; // Mỏ vàng: +1
-    const buildable = g.hand.filter((c) => !c.noBuild && (!owned.has(c.key) || owned.has('quarry')));
-    const affordNow = buildable.some((c) => c.cost <= me.gold + nGold);
-    const tip = t.bewitched ? '' : !buildable.length ? 'draw' : affordNow ? 'gold' : '';
-    title = tx('Bước 1 — Nhận tài nguyên', 'Step 1 — Gather resources');
+    const info = CHARS[t.rank];
+    const skill = skillName(t.key);
+    const cards = [];
+    if (!t.actionTaken) {
+      // Bước 1: nhận tài nguyên (bắt buộc)
+      const nDraw = has('observatory') ? 3 : 2;
+      const nKeep = has('library') ? nDraw : 1;
+      const nGold = has('goldmine') ? 3 : 2;
+      const buildable = g.hand.filter((c) => !c.noBuild && (!owned.has(c.key) || owned.has('quarry')));
+      const tip = t.bewitched ? '' : !buildable.length ? 'draw' : buildable.some((c) => c.cost <= me.gold + nGold) ? 'gold' : '';
+      cards.push(choiceCard({ act: { type: 'takeGold' }, cls: 'gold', art: icon('gold'), title: tx(`Lấy ${nGold} vàng`, `Take ${nGold} gold`),
+        desc: `${tx('Vàng', 'Gold')}: ${me.gold} → <b>${me.gold + nGold}</b>`, hint: tip === 'gold' ? tx('💡 Nên chọn: đủ tiền xây lá trên tay', '💡 Suggested: enough to build a card in hand') : '' }),
+      choiceCard({ act: { type: 'drawCards' }, cls: 'draw', off: !g.deckCount, art: icon('drawcards'), title: tx('Rút bài', 'Draw cards'),
+        desc: tx(`Rút ${nDraw} lá, giữ <b>${nKeep}</b>`, `Draw ${nDraw}, keep <b>${nKeep}</b>`), hint: tip === 'draw' ? tx('💡 Nên chọn: không còn lá nào để xây', '💡 Suggested: nothing left to build') : '' }));
+    } else if (t.maxBuilds && t.builds < t.maxBuilds) {
+      // Xây: đóng bảng để kéo lá trên tay lên bàn
+      const playable = g.hand.filter((c) => g.costs && g.costs[c.id] && !g.costs[c.id].why).length;
+      cards.push(choiceCard({ act: { type: 'turnPopupHide' }, cls: 'build', off: !playable, art: icon('build'), title: tx('Xây công trình', 'Build a district'),
+        desc: playable ? tx(`Kéo lá sáng lên bàn để xây · ${t.builds}/${t.maxBuilds}`, `Drag a glowing card onto the table · ${t.builds}/${t.maxBuilds}`) : tx('Không có lá nào xây được', 'No card you can build') }));
+    }
+    // Kỹ năng nhân vật (tùy chọn)
+    if (skill && !t.abilityUsed && !t.bewitched) {
+      const off = skillOff(g, t);
+      cards.push(choiceCard({ act: TILE_MODE[t.key] ? { type: 'mode', attrs: `data-mode="${TILE_MODE[t.key]}"` } : { type: 'abilityOpen' }, cls: `skill ch-${t.rank}`, off: !!off,
+        art: medal(t.rank, 'lg'), title: `${skill}${t.key === 'artist' ? ` ${t.beauty}/2` : ''}`, desc: off || chDesc(t.rank), hint: tx('Kỹ năng · tùy chọn', 'Ability · optional') }));
+    }
+    // Thu thuế theo màu công trình (tự động khi kết thúc lượt nếu quên)
+    if (!t.incomeTaken && !t.threat && info.color) {
+      const n = me.city.filter((c) => c.color === info.color || c.key === 'magicschool').length;
+      const why = tx(`+1 mỗi công trình ${colorName(info.color)}`, `+1 per ${colorName(info.color)} district`);
+      if (info.income === 'choose') {
+        cards.push(choiceCard({ act: { type: 'income', attrs: `data-gold="${n}"` }, cls: 'gold', art: icon('gold'), title: tx(`Thu thuế +${n} vàng`, `Collect +${n} gold`), desc: why }),
+          choiceCard({ act: { type: 'income', attrs: 'data-gold="0"' }, cls: 'draw', art: icon('cards'), title: tx(`Thu thuế +${n} lá`, `Collect +${n} cards`), desc: why }));
+      } else {
+        cards.push(choiceCard({ act: { type: 'income' }, cls: info.income === 'card' ? 'draw' : 'gold', art: icon(info.income === 'card' ? 'cards' : 'gold'),
+          title: tx(`Thu thuế +${n}${info.income === 'card' ? ' lá' : ' vàng'}`, `Collect +${n}${info.income === 'card' ? ' cards' : ' gold'}`), desc: why }));
+      }
+    }
+    // Công trình hỗ trợ: chỉ hiện khi dùng được ngay (thẻ mờ chỉ làm rối)
+    if (has('laboratory') && !t.labUsed && g.hand.length) cards.push(choiceCard({ act: { type: 'mode', attrs: 'data-mode="lab"' }, art: icon('laboratory'), title: tx('Phòng thí nghiệm', 'Laboratory'), desc: tx('Bỏ 1 lá → +2 vàng', 'Discard 1 card → +2 gold') }));
+    if (has('smithy') && !t.smithyUsed && me.gold >= 2) cards.push(choiceCard({ act: { type: 'smithy' }, art: icon('smithy'), title: tx('Lò rèn', 'Smithy'), desc: tx('Trả 2 vàng → rút 3 lá', 'Pay 2 gold → draw 3 cards') }));
+
+    title = !t.actionTaken ? tx('Bước 1 — Nhận tài nguyên', 'Step 1 — Gather resources') : tx('Bước 2 — Xây & dùng kỹ năng', 'Step 2 — Build & use abilities');
     if (t.bewitched) sub = tx('🧙 Bạn bị yểm bùa: chỉ được nhận tài nguyên, sau đó Phù thủy chơi tiếp lượt này.', '🧙 You are bewitched: you only gather resources, then the Witch plays the rest of this turn.');
-    else if (t.threat) sub = tx('✉️ Bạn nhận thư đe dọa — sau khi nhận tài nguyên phải chọn trả tiền hay từ chối.', '✉️ You received a threat — after gathering resources you must pay or refuse.');
-    body = choiceCard({ act: { type: 'takeGold' }, cls: 'gold', art: icon('gold'), title: tx(`Lấy ${nGold} vàng`, `Take ${nGold} gold`),
-      desc: `${tx('Vàng', 'Gold')}: ${me.gold} → <b>${me.gold + nGold}</b>`, hint: tip === 'gold' ? tx('💡 Nên chọn: đủ tiền xây lá trên tay', '💡 Suggested: enough to build a card in hand') : '' })
-      + choiceCard({ act: { type: 'drawCards' }, cls: 'draw', off: !g.deckCount, art: icon('drawcards'), title: tx('Rút bài', 'Draw cards'),
-        desc: tx(`Rút ${nDraw} lá, giữ <b>${nKeep}</b>`, `Draw ${nDraw}, keep <b>${nKeep}</b>`), hint: tip === 'draw' ? tx('💡 Nên chọn: không còn lá nào để xây', '💡 Suggested: nothing left to build') : '' });
-    foot = `<span class="muted">${SKILL[t.key] && !t.bewitched ? tx(`Kỹ năng (${skillName(t.key)}) dùng ở thanh góc dưới phải.`, `Use your ability (${skillName(t.key)}) from the bottom-right panel.`) : ''}</span>
-      <button class="small ghost" data-act="turnPopupHide">👁 ${tx('Xem bàn chơi', 'View the table')}</button>`;
+    else if (t.threat && !t.actionTaken) sub = tx('✉️ Bạn nhận thư đe dọa — sau khi nhận tài nguyên phải chọn trả tiền hay từ chối.', '✉️ You received a threat — after gathering resources you must pay or refuse.');
+    else if (t.key === 'emperor' && !t.abilityUsed) sub = tx('👑 Phải trao vương miện trước khi kết thúc lượt.', '👑 You must give away the crown before ending your turn.');
+    else if (t.key === 'navigator') sub = tx('⚓ Nhà hàng hải không được xây trong lượt này.', '⚓ The Navigator cannot build this turn.');
+    body = cards.join('');
+    const canEnd = t.actionTaken && !t.threat;
+    foot = `<button class="small ghost" data-act="turnPopupHide">👁 ${tx('Xem bàn chơi', 'View the table')}</button>
+      <button class="primary big tp-end" data-act="endTurn" ${canEnd ? '' : `disabled title="${tx('Nhận tài nguyên trước', 'Gather resources first')}"`}>${tx('Kết thúc lượt', 'End turn')} ➜</button>`;
   } else if (mode === 'keep') {
     title = tx(`Chọn ${t.keepLeft} lá để giữ`, `Choose ${t.keepLeft} card(s) to keep`);
     body = t.drawn.map((c, k) => cardHtml(c, { style: `--i:${k}`, cls: 'clickable', act: 'keep',
@@ -1564,57 +1819,34 @@ function renderTurnPopup() {
     ${foot ? `<div class="picker-foot">${foot}</div>` : ''}</div></div>`;
 }
 
-// Thanh điều khiển lượt của mình (góc dưới phải, cạnh quạt bài)
+// Thanh điều khiển lượt của mình (góc dưới phải, cạnh quạt bài): gọn — mọi lựa chọn nằm trong bảng lượt (renderTurnPopup 'main')
 function renderDock(g) {
   const t = g.turn;
   if (g.phase !== 'turns' || !t || t.pi !== g.me || t.choosing) return '';
-  const me = g.players[g.me];
-  const has = (k) => me.city.some((c) => c.key === k);
-  const step = (done, cur, label) => `<span class="dk-step ${done ? 'done' : ''} ${cur ? 'cur' : ''}">${done ? '✔' : '•'} ${label}</span>`;
   const btns = [];
-  const skill = skillName(t.key);
-  const info = CHARS[t.rank];
-
-  if (!t.actionTaken) btns.push(`<button class="primary" data-act="turnPopupShow">🪙 ${tx('Nhận tài nguyên', 'Gather resources')}</button>`);
   if (ui.mode === 'redraw') {
     btns.push(`<button class="primary" data-act="confirmRedraw" ${ui.selected.size ? '' : 'disabled'}>${tx(`Đổi ${ui.selected.size} lá`, `Redraw ${ui.selected.size}`)}</button>`, `<button data-act="cancelMode">${tx('Hủy', 'Cancel')}</button>`);
-  } else if (TILE_MODE[t.key] && ui.mode === TILE_MODE[t.key]) {
-    btns.push(`<button data-act="cancelMode">${t.key === 'artist' && t.beauty ? tx('Xong', 'Done') : tx('Hủy', 'Cancel')}</button>`);
-  } else if (ui.mode === 'lab') {
-    btns.push(`<button data-act="cancelMode">${tx('Hủy', 'Cancel')}</button>`);
-  } else if (!t.abilityUsed && skill && !t.bewitched) {
-    const marks = { warlord: g.destroyable, marshal: g.seizable, diplomat: g.swappable }[t.key];
-    let off = '';
-    if (marks && !marks.length) off = tx('Không có mục tiêu hợp lệ', 'No valid target');
-    if (t.key === 'artist' && (me.gold < 1 || !me.city.some((c) => !c.beauty))) off = tx('Cần 1 vàng và công trình chưa trang trí', 'Needs 1 gold and an undecorated district');
-    if (t.key === 'witch' && !t.actionTaken) off = tx('Nhận tài nguyên trước', 'Gather resources first');
-    if (t.key === 'abbot' && !(g.targets.abbot || []).length) off = tx('Bạn đang là người giàu nhất', 'You are the richest player');
-    if (t.threat) off = tx('Xử lý thư đe dọa trước', 'Resolve the threat first');
-    btns.push(TILE_MODE[t.key]
-      ? `<button data-act="mode" data-mode="${TILE_MODE[t.key]}" ${off ? `disabled title="${off}"` : ''}>${icon(t.key)} ${skill}${t.key === 'artist' ? ` ${t.beauty}/2` : ''}</button>`
-      : `<button data-act="abilityOpen" ${off ? `disabled title="${off}"` : ''}>${medal(t.rank, 'sm')} ${skill}</button>`);
+  } else if (ui.mode) {
+    btns.push(`<button data-act="cancelMode">${t.key === 'artist' && t.beauty && ui.mode === 'artist' ? tx('Xong', 'Done') : tx('Hủy', 'Cancel')}</button>`);
+  } else {
+    btns.push(`<button class="dk-open" data-act="turnPopupShow">☰ ${!t.actionTaken ? tx('Nhận tài nguyên', 'Gather resources') : tx('Hành động', 'Actions')}</button>`);
   }
-  if (!t.incomeTaken && !t.threat) {
-    const n = me.city.filter((c) => c.color === info.color || c.key === 'magicschool').length;
-    if (info.income === 'choose') {
-      btns.push(`<button data-act="income" data-gold="${n}">${icon('gold')} ${tx(`Thu +${n} vàng`, `Collect +${n} gold`)}</button>`, `<button data-act="income" data-gold="0">${icon('cards')} ${tx(`Thu +${n} lá`, `Collect +${n} cards`)}</button>`);
-    } else btns.push(`<button data-act="income">${icon(info.income === 'card' ? 'cards' : 'gold')} ${tx('Thu thuế', 'Collect taxes')} +${n}${info.income === 'card' ? tx(' lá', ' cards') : ''}</button>`);
-  }
-  if (has('laboratory') && !t.labUsed && !ui.mode) btns.push(`<button data-act="mode" data-mode="lab" ${g.hand.length ? '' : 'disabled'} title="${tx('Bỏ 1 lá → +2 vàng', 'Discard 1 card → +2 gold')}">${icon('laboratory')} ${tx('Thí nghiệm', 'Laboratory')}</button>`);
-  if (has('smithy') && !t.smithyUsed) btns.push(`<button data-act="smithy" ${me.gold >= 2 ? '' : 'disabled'} title="${tx('Trả 2 vàng → rút 3 lá', 'Pay 2 gold → draw 3 cards')}">${icon('smithy')} ${tx('Lò rèn', 'Smithy')}</button>`);
-
-  let hintText = modeHint(ui.mode) || (ui.mode === 'redraw' ? tx('Bấm các lá trên tay muốn bỏ', 'Click the cards in hand to discard') : ui.mode === 'lab' ? tx('Bấm 1 lá trên tay để bỏ lấy 2 vàng', 'Click 1 card in hand to discard for 2 gold') : '');
-  if (t.key === 'emperor' && !t.abilityUsed) hintText = hintText || tx('👑 Phải trao vương miện trước khi kết thúc lượt', '👑 You must give away the crown before ending your turn');
-  if (t.key === 'navigator') hintText = hintText || tx('⚓ Nhà hàng hải không được xây trong lượt này', '⚓ The Navigator cannot build this turn');
+  const hintText = modeHint(ui.mode) || (ui.mode === 'redraw' ? tx('Bấm các lá trên tay muốn bỏ', 'Click the cards in hand to discard') : ui.mode === 'lab' ? tx('Bấm 1 lá trên tay để bỏ lấy 2 vàng', 'Click 1 card in hand to discard for 2 gold')
+    : t.actionTaken && t.builds < t.maxBuilds ? tx(`⬆ Kéo lá sáng lên bàn để xây · ${t.builds}/${t.maxBuilds}`, `⬆ Drag a glowing card onto the table · ${t.builds}/${t.maxBuilds}`) : '');
   // Gián điệp: bài vừa xem được của người bị do thám (chỉ mình thấy)
   const spied = t.spied ? `<div class="dk-spy">🕵️ ${tx('Bài của', 'Hand of')} <b>${esc(g.players[t.spied.target].name)}</b>: ${t.spied.cards.length
     ? t.spied.cards.map((c) => `<span class="spy-c c-${c.color}" title="${esc(cName(c))}">${icon(c.key)}</span>`).join('') : `<i>${tx('không có lá nào', 'no cards')}</i>`}</div>` : '';
-  return `<div class="turn-dock">
-    <div class="dk-head">${medal(t.rank, 'sm')}<b>${tx('Lượt của bạn', 'Your turn')} · ${cName(info)}</b></div>
-    <div class="dk-steps">${step(t.actionTaken, !t.actionTaken, tx('Tài nguyên', 'Resources'))}${skill ? step(t.abilityUsed, false, skill) : ''}${t.maxBuilds ? step(t.builds >= t.maxBuilds, t.actionTaken && t.builds < t.maxBuilds, `${tx('Xây', 'Build')} ${t.builds}/${t.maxBuilds}`) : ''}</div>
+  if (ui.autoEndAt) {
+    return `<div class="turn-dock slim auto-end">
+      <div class="dk-head">${medal(t.rank, 'sm')}<b>✔ ${tx('Đã xong lượt — tự kết thúc…', 'All done — ending your turn…')}</b></div>
+      <div class="ae-bar"><i style="animation-duration:${AUTO_END_MS}ms"></i></div>
+      <div class="dk-btns"><button data-act="autoEndStay">✋ ${tx('Ở lại', 'Wait')}</button><button class="primary dk-end" data-act="endTurn">${tx('Kết thúc ngay', 'End now')} ➜</button></div>
+    </div>`;
+  }
+  return `<div class="turn-dock slim">
+    <div class="dk-head">${medal(t.rank, 'sm')}<b>${tx('Lượt của bạn', 'Your turn')} · ${chName(t.rank)}</b></div>
     ${hintText ? `<div class="dk-hint">${hintText}</div>` : ''}${spied}
-    ${btns.length ? `<div class="dk-btns">${btns.join('')}</div>` : ''}
-    <button class="primary big dk-end" data-act="endTurn" ${t.actionTaken && !t.threat ? '' : 'disabled'}>${tx('Kết thúc lượt', 'End turn')} ➜</button>
+    <div class="dk-btns">${btns.join('')}<button class="primary dk-end" data-act="endTurn" ${t.actionTaken && !t.threat ? '' : 'disabled'}>${tx('Kết thúc lượt', 'End turn')} ➜</button></div>
   </div>`;
 }
 
@@ -1680,15 +1912,15 @@ function renderAction() {
   // Ở đây chỉ còn 1 dải ngắn: lựa chọn chính bật thành cửa sổ (renderTurnPopup),
   // nút điều khiển nằm ở thanh góc dưới phải cạnh quạt bài (renderDock)
   const stepText = t.choosing ? tx('Chọn lá bài muốn giữ', 'Choose the card to keep')
-    : !t.actionTaken ? (t.bewitched ? tx('🧙 Bị yểm bùa: chỉ nhận tài nguyên', '🧙 Bewitched: gather resources only') : tx('Bước 1: nhận tài nguyên (lấy vàng hoặc rút bài)', 'Step 1: gather resources (take gold or draw cards)'))
+    : !t.actionTaken ? (t.bewitched ? tx('🧙 Bị yểm bùa: chỉ nhận tài nguyên', '🧙 Bewitched: gather resources only') : tx('Bước 1: chọn Lấy vàng hoặc Rút bài ở thanh bên dưới', 'Step 1: choose Take gold or Draw cards below'))
       : t.threat ? tx('✉️ Xử lý thư đe dọa', '✉️ Resolve the threat')
       : !t.maxBuilds ? tx('Lượt này không được xây — dùng kỹ năng rồi kết thúc lượt', 'No building this turn — use your ability, then end the turn')
-      : t.builds < t.maxBuilds ? tx(`Bước 3: bấm lá bài ở đáy màn hình để xây (${t.builds}/${t.maxBuilds})`, `Step 3: click a card at the bottom to build (${t.builds}/${t.maxBuilds})`)
+      : t.builds < t.maxBuilds ? tx(`Bước 2: kéo lá sáng lên bàn để xây (${t.builds}/${t.maxBuilds}) — xây xong bấm Kết thúc lượt`, `Step 2: drag a glowing card onto the table to build (${t.builds}/${t.maxBuilds}) — then End turn`)
         : tx('✔ Đã xây xong — bấm Kết thúc lượt', '✔ Done building — click End turn');
   return `<div class="turn-strip mine">${medal(t.rank, 'sm')}
     <b class="ts-char">⭐ ${tx('Lượt của bạn', 'Your turn')} — ${chName(t.rank)}</b>
     <span class="ts-last n-build">${stepText}</span>
-    ${!t.actionTaken && !t.choosing && ui.turnPopupHidden ? `<button class="primary small" data-act="turnPopupShow">${tx('Nhận tài nguyên', 'Gather resources')}</button>` : ''}</div>`;
+</div>`;
 }
 
 // ---------- Cửa sổ luật chơi & mẹo ----------
@@ -1778,11 +2010,8 @@ const GENERAL_TIPS = [
   ['Về đích trước', 'Người hoàn thành thành phố đầu tiên được +4 điểm, người hoàn thành sau +2. Vòng cuối vẫn chơi hết, nên tận dụng để xây thêm.'],
 ];
 
-function renderModal() {
-  const el = $('#modal');
-  if (!ui.rulesOpen) { el.innerHTML = ''; return; }
-  const tab = ui.rulesTab || 'rules';
-  const tabs = [['rules', tx('Luật chơi', 'Rules')], ['chars', tx('Nhân vật', 'Characters')], ['districts', tx('Công trình', 'Districts')], ['tips', tx('Mẹo chơi', 'Tips')]];
+const rulesTabs = () => [['rules', tx('Luật chơi', 'Rules')], ['chars', tx('Nhân vật', 'Characters')], ['districts', tx('Công trình', 'Districts')], ['tips', tx('Mẹo chơi', 'Tips')]];
+function rulesTabBody(tab) {
   let body = '';
   if (tab === 'rules') {
     body = tx(`
@@ -1884,11 +2113,90 @@ function renderModal() {
       <h3 style="margin-top:18px">${tx('Mẹo theo nhân vật', 'Tips by character')}</h3>
       ${Object.entries(CHARS).filter(([, c]) => !c.unknown).map(([r, c]) => `<div class="rc sm">${medal(r, 'sm')}<p><b>${cName(c)}:</b> ${charTip(c.key)}</p></div>`).join('')}`;
   }
+  return body;
+}
+
+// ---------- Tìm trong Luật chơi & mẹo: tìm cùng lúc cả 4 tab, không phân biệt dấu (gõ "tho xay" ra "Thợ xây") ----------
+// fold: bỏ dấu từng ký tự, giữ nguyên độ dài chuỗi → vị trí khớp trên chuỗi đã bỏ dấu = vị trí trên chuỗi gốc (để tô sáng)
+const fold = (str) => Array.from(str, (c) => c.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/, 'd').toLowerCase().charAt(0) || c).join('');
+function markHits(el, qf) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const n of nodes) {
+    const t = n.nodeValue;
+    const f = fold(t);
+    let i = f.indexOf(qf);
+    if (i < 0) continue;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    while (i >= 0) {
+      frag.append(t.slice(last, i));
+      const m = document.createElement('mark');
+      m.textContent = t.slice(i, i + qf.length);
+      frag.append(m);
+      last = i + qf.length;
+      i = f.indexOf(qf, last);
+    }
+    frag.append(t.slice(last));
+    n.replaceWith(frag);
+  }
+}
+const SR_SEL = '.rc, .rd-row, .rp-row, .tipc, li, tr, p';
+function rulesSearchHtml(q) {
+  const qf = fold(q);
+  let total = 0;
+  const cur = ui.rulesTab || 'rules';
+  const tabsOrdered = rulesTabs().sort((a, b) => (b[0] === cur) - (a[0] === cur)); // tab đang mở lên đầu
+  const groups = tabsOrdered.map(([k, label]) => {
+    const box = document.createElement('div');
+    box.innerHTML = rulesTabBody(k);
+    // Mỗi "mục" là 1 khối nhỏ nhất có nghĩa (1 nhân vật, 1 công trình, 1 dòng luật, 1 mẹo); bỏ khối nằm trong khối khác & dòng tiêu đề bảng
+    const items = [...box.querySelectorAll(SR_SEL)]
+      .filter((el) => !el.parentElement.closest(SR_SEL) && !(el.tagName === 'TR' && el.querySelector('th')) && fold(el.textContent).includes(qf))
+      .map((el) => {
+        // Ngữ cảnh: tiêu đề mục luật / màu công trình
+        let ctx = '';
+        const holder = el.closest('table, ol, ul') || el;
+        for (let h = holder.previousElementSibling; h; h = h.previousElementSibling) if (h.tagName === 'H3') { ctx = h.textContent; break; }
+        const rd = el.closest('.rd');
+        if (rd) ctx = rd.querySelector('.rd-h').textContent;
+        const c = document.createElement('div');
+        c.className = `sr-item ${el.classList.contains('rc') || el.classList.contains('rp-row') || el.classList.contains('tipc') ? '' : 'plain'}`;
+        if (el.tagName === 'TR') c.innerHTML = [...el.cells].map((td) => td.innerHTML).filter(Boolean).join(' · ');
+        else if (['LI', 'P'].includes(el.tagName)) c.innerHTML = el.innerHTML;
+        else c.append(el.cloneNode(true));
+        markHits(c, qf);
+        return `${ctx ? `<div class="sr-ctx">${esc(ctx)}</div>` : ''}${c.outerHTML}`;
+      });
+    total += items.length;
+    return items.length ? `<section class="sr-group"><h3>${label} <span class="muted">(${items.length})</span></h3>${items.join('')}</section>` : '';
+  }).join('');
+  return total ? `<p class="muted sr-sum">${tx(`${total} kết quả cho “${esc(q)}”`, `${total} results for “${esc(q)}”`)}</p>${groups}`
+    : `<p class="muted sr-sum">${tx(`Không tìm thấy “${esc(q)}”. Thử từ khác, ví dụ: thuế, Kẻ trộm, vương miện, điểm…`, `Nothing found for “${esc(q)}”. Try another word, e.g. tax, Thief, crown, score…`)}</p>`;
+}
+const rulesQuery = () => (ui.rulesQuery || '').trim();
+const modalBodyHtml = () => (rulesQuery().length >= 2 ? rulesSearchHtml(rulesQuery()) : rulesTabBody(ui.rulesTab || 'rules'));
+
+function renderModal() {
+  const el = $('#modal');
+  if (!ui.rulesOpen) { el.innerHTML = ''; return; }
+  const tab = ui.rulesTab || 'rules';
   el.innerHTML = `<div class="modal-bg" data-act="closeRules"><div class="modal" role="dialog" aria-label="${tx('Luật chơi', 'Rules')}">
     <div class="modal-head"><h2>📜 ${tx('Luật chơi Citadels', 'Citadels rules')}</h2><button class="small ghost" data-act="closeRules" title="${tx('Đóng (Esc)', 'Close (Esc)')}">✕</button></div>
-    <div class="modal-tabs">${tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="rulesTab" data-tab="${k}">${l}</button>`).join('')}</div>
-    <div class="modal-body">${body}</div></div></div>`;
+    <div class="modal-tabs">${rulesTabs().map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="rulesTab" data-tab="${k}">${l}</button>`).join('')}</div>
+    <div class="modal-search"><input id="rulesSearch" type="search" autocomplete="off" value="${esc(ui.rulesQuery || '')}"
+      placeholder="🔍 ${tx('Tìm trong luật, nhân vật, công trình, mẹo… (không cần gõ dấu)', 'Search rules, characters, districts, tips…')}" aria-label="${tx('Tìm trong luật chơi', 'Search the rules')}"></div>
+    <div class="modal-body">${modalBodyHtml()}</div></div></div>`;
 }
+// Gõ tìm: chỉ vẽ lại phần kết quả (ô nhập giữ nguyên con trỏ)
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'rulesSearch') return;
+  ui.rulesQuery = e.target.value;
+  const body = $('.modal-body');
+  body.innerHTML = modalBodyHtml();
+  body.scrollTop = 0;
+});
 
 // ---------- Sự kiện ----------
 document.addEventListener('click', (e) => {
@@ -1896,15 +2204,28 @@ document.addEventListener('click', (e) => {
   if (!el || el.disabled) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
+  if (act === 'sheetStay') return; // bấm trong bảng trượt (không phải nút) → không đóng
   if (act !== 'sfx') sfx('tick');
   switch (act) {
+    case 'sheet': ui.sheet = el.dataset.val || null; if (!ui.sheet) ui.cityFocus = null; return render();
+    case 'avatarPick': ui.avatarPick = !ui.avatarPick; return render();
+    case 'autoEndStay': ui.autoEndStay = ui.turnKey; cancelAutoEnd(); return render();
+    case 'setAvatar': {
+      const av = AVATARS.includes(el.dataset.av) ? el.dataset.av : '';
+      try { localStorage.setItem('citadels-avatar', av); } catch { /* bỏ qua */ }
+      ui.avatarPick = false;
+      if (S.room) socket.emit('setAvatar', { avatar: av });
+      return render();
+    }
+    case 'sideTab': ui.sideTab = ui.sideTab === el.dataset.val ? null : el.dataset.val; return render();
+    case 'cityOf': return openCity(Number(el.dataset.pi));
     case 'sfx': Sfx.toggle(); return render();
     case 'music': Sfx.toggleMusic(); return render();
     case 'create': {
       const name = $('#name').value.trim();
       if (!name) return toast(tx('Hãy nhập tên của bạn', 'Please enter your name'));
       localStorage.setItem('citadels-name', name);
-      return socket.emit('create', { name });
+      return socket.emit('create', { name, avatar: getAvatar() });
     }
     case 'join': {
       const name = $('#name').value.trim();
@@ -1912,7 +2233,7 @@ document.addEventListener('click', (e) => {
       if (!name) return toast(tx('Hãy nhập tên của bạn', 'Please enter your name'));
       if (!code) return toast(tx('Hãy nhập mã phòng', 'Please enter the room code'));
       localStorage.setItem('citadels-name', name);
-      return socket.emit('join', { code, name });
+      return socket.emit('join', { code, name, avatar: getAvatar() });
     }
     case 'copy':
       navigator.clipboard?.writeText(el.dataset.link).then(() => toast(tx('Đã sao chép link mời!', 'Invite link copied!'), 'info'), () => toast(el.dataset.link, 'info'));
@@ -2006,8 +2327,8 @@ document.addEventListener('click', (e) => {
     case 'lab':
       ui.mode = null;
       return send('laboratory', { cardId: Number(id) });
-    case 'mode': ui.mode = el.dataset.mode; ui.abilityPopup = false; ui.selected.clear(); ui.pick.dip = null; return render();
-    case 'cancelMode': ui.mode = null; ui.selected.clear(); ui.pick.dip = null; return render();
+    case 'mode': ui.mode = el.dataset.mode; ui.abilityPopup = false; ui.turnPopupHidden = true; ui.selected.clear(); ui.pick.dip = null; return render();
+    case 'cancelMode': ui.mode = null; ui.selected.clear(); ui.pick.dip = null; ui.turnPopupHidden = false; return render();
     case 'logFilter': ui.logFilter = el.dataset.val; return render();
     case 'turnPopupHide': ui.turnPopupHidden = true; return render();
     case 'turnPopupShow': ui.turnPopupHidden = false; return render();
@@ -2039,7 +2360,14 @@ document.addEventListener('click', (e) => {
       try { localStorage.setItem('citadels-3d', ui.show3d ? 'on' : 'off'); } catch (_) {}
       return render();
     case 'rules': ui.rulesOpen = true; ui.rulesTab = el.dataset.tab || ui.rulesTab || 'rules'; return renderModal();
-    case 'rulesTab': ui.rulesTab = el.dataset.tab; return renderModal();
+    case 'rulesTab': { // đang tìm: chỉ đổi tab ưu tiên (giữ từ khóa & con trỏ trong ô tìm)
+      ui.rulesTab = el.dataset.tab;
+      if (!rulesQuery() || rulesQuery().length < 2) return renderModal();
+      document.querySelectorAll('.modal-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === ui.rulesTab));
+      $('.modal-body').innerHTML = modalBodyHtml();
+      $('.modal-body').scrollTop = 0;
+      return;
+    }
     case 'closeRules':
       if (el.classList.contains('modal-bg') && e.target !== el) return; // bấm bên trong hộp thoại thì không đóng
       ui.rulesOpen = false; return renderModal();
@@ -2069,8 +2397,11 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if ((e.key === 'm' || e.key === 'M') && window.Voice && Voice.on && !e.ctrlKey && !e.metaKey && !e.altKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) Voice.setMuted(!Voice.muted);
-  if (e.key === 'Escape' && ui.rulesOpen) { ui.rulesOpen = false; renderModal(); }
+  if (e.key === 'Escape' && ui.rulesOpen && rulesQuery()) { ui.rulesQuery = ''; renderModal(); const i = $('#rulesSearch'); if (i) i.focus(); }
+  else if (e.key === 'Escape' && ui.rulesOpen) { ui.rulesOpen = false; renderModal(); }
   else if (e.key === 'Escape' && ui.chatOpen) { ui.chatOpen = false; render(); }
+  else if (e.key === 'Escape' && ui.sheet) { ui.sheet = null; render(); }
+  else if (e.key === 'Escape' && ui.avatarPick) { ui.avatarPick = false; render(); }
 });
 
 // Quạt bài phụ thuộc chiều rộng màn hình → vẽ lại khi đổi kích thước

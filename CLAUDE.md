@@ -11,7 +11,7 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 - `BOT_DELAY=5 npm start` — bot chơi siêu nhanh, dùng khi test thủ công / e2e; `TURN_TIME=5` — giới hạn mỗi lượt 5 giây thay vì 90 (test hết giờ)
 - `node scripts/fetch-icons.js` — tải lại icon vào `public/icons.js` (sửa map `ICONS` trong script khi cần thêm icon)
 - `npm run preview` — server xem trước giao diện với trạng thái mẫu (http://localhost:3200/preview.html#turn); chụp ảnh từ Windows bằng `scripts/preview/shoot.ps1` (`-Device 390x844` cho điện thoại, `-Device 1366x768` cho laptop; `-Query "?lang=en"` cho tiếng Anh; `-Touch` giả lập màn cảm ứng như iOS/Android; `-Device 844x390 -Touch` cho điện thoại xoay ngang). Luôn tự chụp & xem ảnh sau khi sửa giao diện, cả màn rộng lẫn điện thoại.
-- Node chạy trong WSL (Ubuntu-24.04); Windows không có Node. Từ PowerShell: `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/game && npm test"`
+- Node của dự án chạy trong WSL (Ubuntu-24.04, Node 18) — luôn chạy npm/test ở đó (node_modules nằm trong WSL). Windows có Node 24 chỉ để chạy hook của plugin Claude Code (Ponytail), không dùng cho dự án. Từ PowerShell: `wsl -d Ubuntu-24.04 -- bash -lc "cd ~/game && npm test"`
 
 ## Kiến trúc
 
@@ -29,12 +29,15 @@ Web chơi board game Citadels online nhiều người (2–7), có bot. Node.js 
 ## Quy ước
 
 - Song ngữ: tiếng Việt (mặc định) + tiếng Anh. Client: `tx(vi, en)`, `cName/cDesc` (thẻ có `nameEn/descEn`), `chName(r)`; server: `addLog(vi, en, tone)`, `note(vi, en)`, `fail(vi, en?)` (câu cố định tra bảng `FAIL_EN`), tên nhân vật trong log dùng `charName`/`charNameEn` (cả hai đều đánh dấu số đó là công khai). Mọi chữ mới phải có cả 2 ngôn ngữ.
-- Toàn bộ text tiếng Việt hiển thị cho người chơi phải **có dấu**. Font tiêu đề `var(--display)` (Playfair Display); `var(--brand)` (Cinzel) KHÔNG có dấu tiếng Việt — chỉ dùng cho chữ "Citadels" và số.
+- Toàn bộ text tiếng Việt hiển thị cho người chơi phải **có dấu**. Font: toàn bộ không chân — Be Vietnam Pro (`var(--display)` tiêu đề, `var(--brand)` chữ "Citadels" & số); không dùng font có chân.
 - Server-authoritative: client không bao giờ tự quyết định luật; chỉ gửi ý định `{ type, ... }`.
 - Không lộ thông tin bí mật trong `viewFor`: bài trên tay người khác, nhân vật chưa lộ diện, lá úp, bài vừa rút của người khác.
 - Thêm loại hành động mới: thêm vào `Game.act` switch + `botAction` (nếu bot cần) + UI trong `renderAction` + case trong click handler.
 - Điện thoại: không dựa vào rê chuột (`title`, `:hover`) cho thông tin quan trọng; chiều cao dùng `svh/dvh` kèm `vh` dự phòng; phần tử cố định mép màn hình cộng `env(safe-area-inset-*)`. Quạt bài trên màn cảm ứng: chạm 1 = xem, chạm 2 = làm (listener `click` capture trong app.js).
 - Hiệu năng (điện thoại hay nóng máy): animation lặp vô hạn chỉ đổi `opacity` / `transform` (glow thì đặt ở `::after` rồi đổi opacity) — không animate `box-shadow`, `filter`, `outline`, không animate phần tử trong SVG lớn; không dùng `backdrop-filter`, `background-attachment: fixed`. Bàn 3D: `update()` chỉ `kick()` + tính lại bóng khi cảnh thật sự đổi; đo bằng view xem trước `perf` (`renderer.info.render.frame`).
+- Màn chơi gọn 1 màn hình: thông tin phụ (thành phố người chơi, nhật ký) để trong tab cột phải (màn rộng, `renderSideTabs`) hoặc bảng trượt (màn hẹp, `renderSheet`, `ui.sheet`) — không thêm khung cố định dưới bàn 3D. Lượt mình: bảng lớn kiểu bảng chọn nhân vật (`renderTurnPopup` chế độ `'main'`, mỗi việc 1 thẻ `choiceCard`); thanh `renderDock` chỉ còn mở lại bảng + Kết thúc lượt. Thành phố / Nhật ký mặc định đóng. Xây bằng kéo lá lên bàn (`drag`) hoặc bấm.
+- Màn ≥1021px được thu nhỏ bằng CSS `zoom` (`applyUiZoom`, hệ số `UIZ`): tọa độ chuột & `getBoundingClientRect` là px thật trên màn, còn px gán cho phần tử bị nhân zoom → đo rồi đặt vị trí thì chia cho `UIZ`; chiều cao theo màn hình ở màn rộng dùng `var(--vh100)` thay `vh`. Test giao diện ở cả điện thoại (390×844, 844×390), iPad (820×1180, 1180×820, `-Touch`) và máy tính (1366, 1920).
+- Server: mọi sự kiện socket đăng ký bằng `on(...)` (bọc lỗi + giới hạn tần suất), không dùng `socket.on` trực tiếp (trừ `disconnect`). Dữ liệu client gửi lên luôn coi là không tin cậy.
 - Comment ngắn bằng tiếng Việt, theo mật độ hiện có. Không thêm dependency khi chưa cần.
 - Icon từ game-icons.net (CC BY 3.0) — giữ dòng ghi công ở footer.
 

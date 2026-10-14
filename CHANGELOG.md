@@ -4,6 +4,43 @@
 
 ## [Unreleased]
 
+### Sửa lỗi — server sập / quá tải
+- **Một gói tin sai dạng làm sập cả server** (vd. `create` với dữ liệu `null` → `TypeError: Cannot destructure property 'name' of null` → tiến trình Node thoát, mọi phòng mất). Mọi sự kiện socket giờ đi qua hàm bọc `on()` (bắt lỗi + chuẩn hóa dữ liệu + giới hạn tần suất: chat 5 tin/5s, hành động 20/2s); thêm `uncaughtException` / `unhandledRejection` ghi log rồi chạy tiếp; gói từ client tối đa 64KB; gửi trạng thái trong đồng hồ bot / hết giờ cũng được bọc lỗi. Đã kiểm chứng: cùng chuỗi gói lỗi, bản cũ thoát, bản mới vẫn phục vụ người khác.
+- **Gói trạng thái nhỏ lại**: nhật ký chiếm ~70% mỗi gói và bị gửi lại toàn bộ mỗi lần cập nhật. Server chỉ gửi 80 dòng cuối, client gộp theo `gameId` (`mergeLog`). Thử tải 10 phòng × 8 người: gói trung bình 27.9 → 19.8KB, lớn nhất 52 → 28KB, CPU 12% → 10%. Nén WebSocket bật được bằng `WS_COMPRESS=1` (tốn CPU — máy chủ yếu để tắt).
+- **Phòng bỏ dở được dọn**: không còn người thật nào kết nối trong 10 phút → xóa phòng và mọi đồng hồ (`deleteRoom`).
+
+### Thay đổi — dễ chơi hơn, gọn 1 màn hình (phản hồi người chơi)
+- **Nút Rời phòng luôn thấy** trên điện thoại dọc / ngang (ghim mép phải thanh trên cùng; trước bị đẩy ra ngoài, phải vuốt / xoay ngang).
+- **Bảng lượt kiểu bảng chọn nhân vật**: tới lượt mình, bảng lớn bật lên với mỗi việc là 1 thẻ lớn — Bước 1: Lấy vàng / Rút bài (💡 thẻ nên chọn), Bước 2: Xây công trình (đóng bảng để kéo lá), kỹ năng nhân vật (kèm mô tả), Thu thuế theo màu (nói rõ +1 mỗi công trình màu gì), công trình hỗ trợ (chỉ hiện khi dùng được); nút "Kết thúc lượt" lớn. Thanh điều khiển nhỏ chỉ còn "☰ Hành động" (mở lại bảng) + "Kết thúc lượt". Trước đây là ô nhỏ nhiều nút na ná nhau ("Thu 1 vàng" của kỹ năng Tu viện trưởng lẫn "Thu +1 vàng" thu thuế), khó nhìn.
+- **Kéo lá lên bàn để xây** (chuột & cảm ứng): nhấn lá đang sáng, kéo lên khỏi khay, thả → xây; có lá "ma" theo tay và nhãn "Thả lên bàn để xây · giá". Bấm như cũ vẫn xây được. Trước đây trên điện thoại phải chạm 2 lần đúng lá trong quạt bài chồng nhau → hay chạm nhầm lá bên cạnh, "bấm chục lần".
+- **Thành phố người chơi đưa lên**: màn rộng — cột phải có tab **Thành phố** / **Nhật ký**, mặc định đóng cả hai (bấm tab mở, bấm lại đóng); màn hẹp — nút 🏰 / 📜 trên bàn 3D mở bảng trượt từ dưới (thành phố vuốt ngang từng người). Chạm bảng tên người chơi trên bàn 3D → mở thành phố người đó. Trước đây danh sách nằm dưới bàn 3D, không ai cuộn xuống xem.
+- **Nhật ký thu gọn mặc định** (tab / bảng trượt, mở khi cần); chat vẫn là nút + khung bật ra.
+- **Tới lượt mình rõ hơn**: dải "Lượt của bạn" nền vàng, viền sáng nhấp 3 lần, ghi đúng 1 việc cần làm ("Bước 1: chọn Lấy vàng hoặc Rút bài…", "Bước 2: kéo lá sáng lên bàn để xây…"); điện thoại rung nhẹ khi tới lượt chơi / lượt chọn nhân vật.
+- **Bớt thông tin trên điện thoại dọc**: ô thông tin của mình còn 1 hàng; thanh vòng chơi thấp hơn; nhóm nút bàn 3D thành 1 hàng trên bàn (trước nằm góc dưới, bị khay bài che).
+- Xem trước / kiểm tra: view `uxtest` (bảng trượt, mở thành phố từ bảng tên, kéo xây / kéo ít không xây), `sheetcities`, `sheetlog`.
+
+### Thêm — chế độ "Luật rừng NNHP"
+- Phòng chờ → Bộ nhân vật → **🌲 Luật rừng NNHP**: **mỗi vòng** rút lại bộ nhân vật (mỗi số ngẫu nhiên 1 trong 3, luôn hợp lệ với số người) thay vì cố định cả ván; bộ giữ bí mật như chế độ ngẫu nhiên, kiến thức vòng trước bị xóa (`Game.rerollCast`, `opts.reshuffle`). Nhật ký báo "🌲 Luật rừng NNHP — bộ nhân vật vòng này đã được rút lại"; huy hiệu 🌲 trên thanh vòng chơi. Client nhớ bộ nhân vật từng vòng (`ui.castByRound`, `withCast`) để nhật ký / xem lại vòng cũ hiện đúng tên.
+- Test: unit test mới; test quét rò rỉ nhân vật chạy cả chế độ này; mô phỏng: 1/4 số ván dùng Luật rừng.
+
+### Thay đổi — cỡ giao diện, tự kết thúc lượt, máy tính bảng
+- **Màn lớn tự thu nhỏ** (giống zoom trình duyệt ~75% trên Full HD): CSS `zoom` = 1440 / bề rộng màn (0.72–1, chỉ từ 1021px), khung trang dùng hết bề ngang. Mọi chỗ đo rồi đặt vị trí chia cho `UIZ` (khay bài, kéo lá, xu bay, độ rộng quạt, tooltip 3D); chiều cao theo màn hình dùng `--vh100` thay `vh` (vh bị zoom làm co). Ai đang zoom trình duyệt 75% nên đưa về 100%.
+- **Tự kết thúc lượt** khi đã làm hết việc làm được (đã nhận tài nguyên, xây đủ / không còn lá xây được, kỹ năng đã dùng hoặc không có mục tiêu, Hoàng đế đã trao vương miện, đã chọn thu thuế vàng/lá, công trình hỗ trợ đã dùng): thanh điều khiển báo "Đã xong lượt — tự kết thúc…" kèm thanh đếm 1.6 giây, nút "Ở lại" để hủy / "Kết thúc ngay". Còn việc thì không tự kết thúc — vừa làm xong 1 việc (vd. kéo lá xây) mà vẫn còn việc → bảng lượt tự mở lại (`turnLeft`, `autoTurn`). Kiểm tra: view `autoendtest`.
+- **Máy tính bảng dọc (601–1020px)**: thanh trên cùng 1 dòng, "Rời phòng" ghim phải; dải "đang chơi" không còn đè nhóm nút Thành phố / Nhật ký. **Điện thoại xoay ngang**: bảng lượt 3 thẻ / hàng, vừa 1 màn.
+- **Vào ván / đổi màn luôn về đầu trang** (trước: bấm "Bắt đầu" ở cuối phòng chờ → màn chơi mở lưng chừng). Kiểm tra: view `scrolltest`.
+- **Danh sách Thành phố ở cột phải** (hẹp 300px): tên + nhân vật / hàng số liệu / hàng công trình — trước bị ép 1 hàng, tên cắt còn "Bot …", số đè lên chữ.
+- **Tìm trong luật**: tab đang mở lên đầu kết quả, bấm tab khi đang tìm = đổi ưu tiên (giữ từ khóa); giãn khoảng cách tab / ô tìm / kết quả.
+- Đã chạy test giao diện ở 390×844, 844×390 (điện thoại), 820×1180, 1180×820 (iPad, giả lập cảm ứng), 1366, 1530, 1920 (máy tính).
+
+### Thêm — tìm kiếm trong "Luật chơi & mẹo"
+- Ô tìm dưới các tab: tìm cùng lúc cả 4 tab (Luật chơi, Nhân vật, Công trình, Mẹo chơi), **không cần gõ dấu** ("thu thue" ra "Thu thuế", "ke trom" ra "Kẻ trộm"), kết quả gom theo tab kèm ngữ cảnh (mục luật / màu công trình), từ khớp tô sáng. Gõ tới đâu cập nhật tới đó (chỉ vẽ lại phần kết quả, ô nhập giữ con trỏ); Esc xóa từ khóa, Esc lần nữa đóng cửa sổ; bấm tab để thoát tìm. Kiểm tra: view `searchtest`; ảnh: `rulessearch`.
+
+### Thêm — đổi avatar
+- 24 avatar vẽ từ icon nhân vật + "chữ cái đầu tên". Đổi ở trang chủ (nút cạnh ô tên) hoặc phòng chờ (bấm avatar của mình); lưu trên máy (`citadels-avatar`), gửi server (`create` / `join` / `setAvatar`) để mọi người cùng thấy. Server chỉ nhận tên trong danh sách (chặn chèn HTML). Xem trước: view `avatarpick`, `avatartest`, `lobbyjungle`.
+
+### Thay đổi — font không chân
+- Bỏ Playfair Display (tiêu đề) và Cinzel (chữ "Citadels", số) — toàn bộ dùng **Be Vietnam Pro** (không chân, đủ dấu tiếng Việt); `--display` / `--brand` vẫn giữ để chỉnh 1 chỗ.
+
 ### Thêm — giới hạn thời gian: chờ quá 90 giây thì mất lượt
 - Mỗi lượt chơi và mỗi lần chọn / bỏ nhân vật của người thật có **90 giây** (cố định, bot không bị tính giờ). Hết giờ khi đang chọn nhân vật → chọn / bỏ ngẫu nhiên 1 lá; hết giờ trong lượt → **mất lượt**: không nhận tài nguyên, không thu theo màu, không xây (`Game.timeout(pi)`). Việc dở dang được xử lý mặc định để không mất bài, không kẹt ván: giữ lá vừa rút, Nhà tiên tri trả đủ bài, Thầy phép không lấy lá, thư đe dọa coi như từ chối, Hoàng đế trao vương miện ngẫu nhiên (không nhận cống), bị yểm bùa → Phù thủy tiếp quản như thường. Nhật ký ghi "⏳ … hết giờ — mất lượt".
 - Server giữ đồng hồ (`syncTimer` trong `server/index.js`, chỉ đặt lại khi sang bước mới), gửi số ms còn lại (`room.deadlineIn`) — client tự tính theo đồng hồ máy mình nên không lệch giờ. `TURN_TIME` (giây) ghi đè khi test.

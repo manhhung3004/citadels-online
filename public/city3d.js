@@ -636,8 +636,9 @@ class CityScene {
     const gold = en ? 'gold' : 'vàng';
     this.tip.innerHTML = `<b>${esc(name)}</b> · ${c.cost + (c.beauty || 0)} ${gold}${desc ? `<div>${esc(desc)}</div>` : ''}${d ? `<div class="d">${esc(d.label || (en ? `⚔️ Click to destroy: ${d.cost} gold` : `⚔️ Bấm để phá: ${d.cost} vàng`))}</div>` : ''}`;
     const rect = this.el.getBoundingClientRect();
-    this.tip.style.left = `${e.clientX - rect.left + 14}px`;
-    this.tip.style.top = `${e.clientY - rect.top + 14}px`;
+    const z = parseFloat(document.documentElement.style.zoom) || 1; // trang thu nhỏ bằng CSS zoom (app.js applyUiZoom)
+    this.tip.style.left = `${(e.clientX - rect.left) / z + 14}px`;
+    this.tip.style.top = `${(e.clientY - rect.top) / z + 14}px`;
     this.tip.style.opacity = 1;
     this.renderer.domElement.style.cursor = d ? 'crosshair' : 'help';
   }
