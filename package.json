@@ -1,6 +1,6 @@
 {
   "name": "citadels-online",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "Citadels board game - chơi online nhiều người",
   "main": "server/index.js",
   "engines": {

@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-14
+
 ### Sửa lỗi — server sập / quá tải
 - **Một gói tin sai dạng làm sập cả server** (vd. `create` với dữ liệu `null` → `TypeError: Cannot destructure property 'name' of null` → tiến trình Node thoát, mọi phòng mất). Mọi sự kiện socket giờ đi qua hàm bọc `on()` (bắt lỗi + chuẩn hóa dữ liệu + giới hạn tần suất: chat 5 tin/5s, hành động 20/2s); thêm `uncaughtException` / `unhandledRejection` ghi log rồi chạy tiếp; gói từ client tối đa 64KB; gửi trạng thái trong đồng hồ bot / hết giờ cũng được bọc lỗi. Đã kiểm chứng: cùng chuỗi gói lỗi, bản cũ thoát, bản mới vẫn phục vụ người khác.
 - **Gói trạng thái nhỏ lại**: nhật ký chiếm ~70% mỗi gói và bị gửi lại toàn bộ mỗi lần cập nhật. Server chỉ gửi 80 dòng cuối, client gộp theo `gameId` (`mergeLog`). Thử tải 10 phòng × 8 người: gói trung bình 27.9 → 19.8KB, lớn nhất 52 → 28KB, CPU 12% → 10%. Nén WebSocket bật được bằng `WS_COMPRESS=1` (tốn CPU — máy chủ yếu để tắt).

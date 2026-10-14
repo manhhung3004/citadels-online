@@ -6,7 +6,7 @@
 ## Trạng thái nhanh
 
 - Game **chơi được trọn vẹn**: 2–7 người, phòng chơi, bot, chat, luật cổ điển đầy đủ.
-- Version `1.2.0` (tag `v1.2.0`); các thay đổi sau đó nằm trong mục `[Unreleased]` của `CHANGELOG.md`.
+- Version `2.0.0` (tag `v2.0.0`, 2026-10-14); các thay đổi sau đó nằm trong mục `[Unreleased]` của `CHANGELOG.md`.
 - Test: `npm test` → 40 unit test + 1400 ván bot mô phỏng (có hết giờ ngẫu nhiên & Luật rừng), **tất cả pass**. Test giao diện chạy Edge thật: view `uxtest traymin clocktest sfx avatartest` (đọc kết quả qua tiêu đề trang).
 - Git: mỗi tính năng 1 nhánh → người dùng tự tạo PR & merge trên GitHub (máy không có `gh`; đưa link `compare/main...<nhánh>?expand=1&title=…&body=…`). Chỉ commit/push khi được yêu cầu.
 
@@ -57,7 +57,7 @@ Sửa code server phải khởi động lại server; sửa client thì chỉ c�
 
 22. **Âm thanh, hiệu năng, khay bài, hết giờ** (phiên 5–6, đã merge, v1.2.0+) — `public/sfx.js` (hiệu ứng + nhạc nền Web Audio), bàn 3D chỉ vẽ dồn khi cảnh đổi, bấm "Bài trên tay" mở khay đang thu gọn, 90 giây mỗi lượt (`Game.timeout`, `syncTimer`).
 
-23. **Phản hồi người chơi đợt 1** (phiên 6, CHƯA commit lúc ghi) — server không còn sập vì gói tin lỗi (hàm bọc `on()`), gói trạng thái nhỏ hơn (80 dòng nhật ký + `mergeLog`), dọn phòng bỏ dở; UX gọn 1 màn hình (nút Rời luôn thấy, tài nguyên trên thanh điều khiển, kéo lá lên bàn để xây, tab/bảng trượt Thành phố & Nhật ký, bảng tên 3D mở thành phố); chế độ 🌲 Luật rừng NNHP; avatar; font không chân. Chưa có log máy chủ thật để xác nhận nguyên nhân sập — nếu còn sập, xin log (Render: tab Logs; Cloudflare: terminal `npm start`).
+23. **Phản hồi người chơi đợt 1** (phiên 6, đã merge vào main, phát hành v2.0.0) — server không còn sập vì gói tin lỗi (hàm bọc `on()`), gói trạng thái nhỏ hơn (80 dòng nhật ký + `mergeLog`), dọn phòng bỏ dở; UX gọn 1 màn hình (nút Rời luôn thấy, tài nguyên trên thanh điều khiển, kéo lá lên bàn để xây, tab/bảng trượt Thành phố & Nhật ký, bảng tên 3D mở thành phố); chế độ 🌲 Luật rừng NNHP; avatar; font không chân. Chưa có log máy chủ thật để xác nhận nguyên nhân sập — nếu còn sập, xin log (Render: tab Logs; Cloudflare: terminal `npm start`).
 
 ## Điểm cần nhớ khi sửa code
 
