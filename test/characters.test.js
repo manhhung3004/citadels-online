@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Game } = require('../server/game');
-const { castProblem, BASE_CAST } = require('../server/cards');
+const { castProblem, BASE_CAST, CHARACTERS } = require('../server/cards');
 
 const card = (id, key, cost, color) => ({ id: 1000 + id, key, name: key, cost, color });
 // Thay nhân vật theo số trong bộ cơ bản: cast({ 1: 'witch', 9: 'queen' })
@@ -460,7 +460,7 @@ test('Luật rừng NNHP: mỗi vòng rút lại bộ nhân vật — luôn hợ
     if (g.round !== round) {
       round = g.round;
       assert.equal(castProblem(Object.values(g.cast), 5), null);
-      assert.equal(g.publicRanks.size, [...g.draft.faceUp].length); // chỉ còn các lá lật ngửa của vòng mới là công khai
+      assert.equal(g.publicRanks.size, 0); // đầu vòng mới: chưa số nào công khai (lá bị loại cũng giấu tên — Luật rừng giấu kỹ)
       assert.match(g.log.find((e) => e.round === round && /Luật rừng/.test(e.text)).text, /rút lại/);
     }
     casts.add(JSON.stringify(g.cast));
@@ -469,4 +469,46 @@ test('Luật rừng NNHP: mỗi vòng rút lại bộ nhân vật — luôn hợ
   }
   assert.ok(g.round >= 8);
   assert.ok(casts.size > 1, 'bộ nhân vật phải đổi ít nhất 1 lần sau 7 vòng');
+});
+
+test('Luật rừng NNHP giấu kỹ: chỉ biết số đã lộ diện + nhân vật của mình; lá đã thấy khi chọn & lá bị loại đầu vòng là "?"; nhật ký không nêu tên số chưa lộ diện', () => {
+  const { botAction } = require('../server/bot');
+  const { randomCast } = require('../server/cards');
+  for (let k = 0; k < 20; k++) {
+    const n = 4 + (k % 4);
+    const g = new Game(Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isBot: true })), { chars: randomCast(n), secretCast: true, reshuffle: true });
+    // Đầu vòng: lá bị loại lật ngửa vẫn là "?" với người không cầm
+    for (const r of g.draft.faceUp) for (const p of g.players) assert.equal(g.viewFor(p.id).cast[r], null, `lá bị loại số ${r} lộ tên`);
+    let steps = 0;
+    while (g.phase !== 'ended' && steps++ < 4000) {
+      const pi = g.currentActor();
+      if (g.phase === 'draft') {
+        const opts = g.draftOptions();
+        const v = g.viewFor(g.players[pi].id);
+        for (const r of opts) assert.ok(v.cast[r], 'đang chọn phải thấy các lá');
+        g.act(pi, botAction(g, pi));
+        // Chọn xong: lá đã thấy mà không lấy quay về "?" (trừ số đã lộ diện / của mình)
+        const after = g.viewFor(g.players[pi].id);
+        for (const r of opts) if (!g.players[pi].chars.includes(r) && !g.revealed[r] && g.phase === 'draft') assert.equal(after.cast[r], null, `lá số ${r} đã thấy khi chọn vẫn lộ tên`);
+        continue;
+      }
+      for (const p of g.players) {
+        const v = g.viewFor(p.id);
+        const meI = g.indexOf(p.id);
+        for (const [r, c] of Object.entries(v.cast)) {
+          const R = Number(r);
+          assert.equal(!!c, !!g.revealed[R] || g.players[meI].chars.includes(R), `số ${R}: biết=${!!c}, lộ diện=${!!g.revealed[R]}`);
+          if (c) continue;
+          // Nhật ký vòng này không nêu tên nhân vật chưa lộ diện
+          const text = v.log.filter((e) => e.round === g.round).map((e) => e.text + ' ' + e.en).join(' ');
+          for (const name of [CHARACTERS[g.cast[R]].name, CHARACTERS[g.cast[R]].nameEn]) {
+            // tên có thể trùng với số đã lộ diện khác (không trùng vì mỗi số 1 nhân vật) — chỉ kiểm tra tên của số chưa lộ
+            assert.ok(!text.includes(name), `nhật ký lộ "${name}" (số ${R})`);
+          }
+        }
+      }
+      g.act(pi, botAction(g, pi));
+    }
+    assert.ok(Object.values(g.viewFor('p0').cast).every(Boolean)); // hết ván: lộ toàn bộ
+  }
 });

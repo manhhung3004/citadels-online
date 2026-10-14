@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Thay đổi — Luật rừng NNHP giấu kỹ hơn
+- Chỉ ở chế độ 🌲 Luật rừng NNHP (Ngẫu nhiên / Tự chọn giữ nguyên): tên nhân vật của mỗi số chỉ hiện khi số đó **được gọi lộ diện**. Lá thấy lúc chọn mà không lấy quay về "?" ngay sau khi chọn; lá bị loại đầu vòng cũng úp; nhật ký ghi "nhân vật số N" thay vì tên cho số chưa lộ diện (vd. "Sát thủ ám sát nhân vật số 4"). Luôn biết nhân vật của mình; hết ván lộ toàn bộ (`Game.hiddenRank`, `charName`, `viewFor` → `knows`). Test mới quét toàn ván ở 4–7 người.
+
 ## [2.0.0] - 2026-10-14
 
 ### Sửa lỗi — server sập / quá tải

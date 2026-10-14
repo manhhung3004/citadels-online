@@ -131,9 +131,11 @@ class Game {
   has(p, key) { return p.city.some((c) => c.key === key); }
 
   key(r) { return this.cast[r]; }
-  // Tên nhân vật dùng trong nhật ký / tóm tắt công khai → từ đây mọi người đều biết số r là ai
-  charName(r) { this.publicRanks.add(r); return CHARACTERS[this.cast[r]].name; }
-  charNameEn(r) { this.publicRanks.add(r); return CHARACTERS[this.cast[r]].nameEn; }
+  // Tên nhân vật dùng trong nhật ký / tóm tắt công khai → từ đây mọi người đều biết số r là ai.
+  // Luật rừng NNHP: số chưa được gọi lộ diện chỉ ghi "nhân vật số r" (không lộ tên, kể cả khi bị nhắm / bị loại đầu vòng)
+  hiddenRank(r) { return this.jungle && this.phase !== 'ended' && !this.revealed[r]; }
+  charName(r) { if (this.hiddenRank(r)) return `nhân vật số ${r}`; this.publicRanks.add(r); return CHARACTERS[this.cast[r]].name; }
+  charNameEn(r) { if (this.hiddenRank(r)) return `rank ${r} character`; this.publicRanks.add(r); return CHARACTERS[this.cast[r]].nameEn; }
 
   // Người đang chọn nhân vật thấy các lá trong bảng chọn của mình
   markSeen() {
@@ -1176,7 +1178,13 @@ class Game {
       hasCrown: i === this.crown,
     }));
     // Bộ nhân vật: số chưa biết (bộ bí mật) gửi null → client hiện "Số N · ?"
-    const knows = (r) => !this.secret || ended || this.publicRanks.has(r) || (me >= 0 && this.seen[me].has(r));
+    // Luật rừng NNHP giấu kỹ hơn: chỉ biết số đã lộ diện, nhân vật của mình, và các lá đang chọn (trong lúc tới lượt chọn) —
+    // lá đã thấy khi chọn nhưng không lấy, lá bị loại đầu vòng đều hiện "?"
+    const mine = me >= 0 ? this.players[me].chars : [];
+    const picking = me >= 0 && this.phase === 'draft' && this.currentActor() === me ? this.draftOptions() : [];
+    const knows = this.jungle
+      ? (r) => ended || !!this.revealed[r] || mine.includes(r) || picking.includes(r)
+      : (r) => !this.secret || ended || this.publicRanks.has(r) || (me >= 0 && this.seen[me].has(r));
     const cast = {};
     for (const [r, k] of Object.entries(this.cast)) {
       const c = CHARACTERS[k];
