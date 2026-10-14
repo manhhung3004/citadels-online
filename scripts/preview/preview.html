@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Playfair+Display:wght@700;800&family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
@@ -54,6 +54,8 @@
     else if (which === 'homesum') setTimeout(() => { const d = document.querySelector('.home details'); if (d) d.open = true; }, 1500);
     else if (which === 'logscroll') {
       // Kiểm tra nhật ký: giữ chỗ đang xem khi không có sự kiện mới; tự cuộn xuống khi có sự kiện mới
+      // (nhật ký mặc định đóng → mở tab Nhật ký / bảng trượt Nhật ký trước)
+      if (WIDE.matches) ui.sideTab = 'log'; else ui.sheet = 'log';
       handlers.state(STATES.wait);
       const L = () => document.querySelector('.log');
       const atBottom = () => L().scrollHeight - L().scrollTop - L().clientHeight < 5;
@@ -138,6 +140,160 @@
           document.title = 'CLOCKTEST ' + r.join(',');
         }, 900);
       }
+    }
+    else if (which === 'scrolltest') {
+      // Phòng chờ cuộn xuống cuối (nút Bắt đầu) → vào ván: màn chơi phải ở đầu trang
+      handlers.state(STATES.lobby);
+      const r = [];
+      setTimeout(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+        r.push(window.scrollY > 50);
+        const g = JSON.parse(JSON.stringify(STATES.wait)); g.game.gameId = 'g-new';
+        handlers.state(g);
+        setTimeout(() => {
+          r.push(window.scrollY === 0);
+          // Cùng ván, cập nhật thường: giữ nguyên chỗ cuộn
+          window.scrollTo(0, 300);
+          const g2 = JSON.parse(JSON.stringify(g)); handlers.state(g2);
+          r.push(window.scrollY > 0);
+          document.title = 'SCROLLTEST ' + r.join(',');
+        }, 400);
+      }, 800);
+    }
+    else if (which === 'autoendtest') {
+      // Xong hết việc → tự kết thúc sau ~1.6s; "Ở lại" hủy; còn việc (kỹ năng) → không tự kết thúc, bảng lượt mở lại
+      const sent = [];
+      socket.emit = (ev, a) => sent.push(a && a.type);
+      const done = JSON.parse(JSON.stringify(STATES.turn));
+      const t = done.game.turn;
+      Object.assign(t, { actionTaken: true, abilityUsed: true, incomeTaken: true, builds: t.maxBuilds, labUsed: true, smithyUsed: true, threat: false });
+      handlers.state(done);
+      const r = [];
+      r.push(!!document.querySelector('.turn-dock.auto-end') && !document.querySelector('.turn-pop'));
+      setTimeout(() => {
+        r.push(sent.includes('endTurn'));
+        sent.length = 0;
+        // Lượt mới (giả lập): xong hết nhưng bấm "Ở lại" → không gửi
+        const d2 = JSON.parse(JSON.stringify(done)); d2.game.round += 1; // lượt mới (khóa lượt đổi theo vòng)
+        handlers.state(d2);
+        document.querySelector('[data-act="autoEndStay"]').click();
+        setTimeout(() => {
+          r.push(!sent.includes('endTurn'));
+          // Còn kỹ năng → không tự kết thúc, bảng lượt hiện kỹ năng
+          const d3 = JSON.parse(JSON.stringify(done)); d3.game.round += 2; d3.game.turn.abilityUsed = false;
+          handlers.state(d3);
+          setTimeout(() => {
+            r.push(!sent.includes('endTurn') && !document.querySelector('.turn-dock.auto-end'));
+            document.title = 'AUTOENDTEST ' + r.join(',');
+          }, 2000);
+        }, 2000);
+      }, 2000);
+    }
+    else if (which === 'rulessearch' || which === 'searchtest') {
+      // Tìm trong Luật chơi & mẹo: không dấu vẫn ra, tô sáng, gõ không mất con trỏ, Esc xóa từ khóa
+      handlers.state(STATES.wait);
+      ui.rulesOpen = true; renderModal();
+      const type = (v) => { const i = document.getElementById('rulesSearch'); i.focus(); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); };
+      setTimeout(() => {
+        type('thu thue');
+        if (which === 'rulessearch') return;
+        const r = [];
+        const groups = document.querySelectorAll('.modal-body .sr-group').length;
+        r.push(groups >= 2 && !!document.querySelector('.modal-body mark'));
+        r.push([...document.querySelectorAll('.modal-body mark')].some((m) => /thuế/i.test(m.textContent)));
+        r.push(document.activeElement && document.activeElement.id === 'rulesSearch');
+        type('ke trom');
+        r.push([...document.querySelectorAll('.modal-body .sr-group h3')].some((h) => /Nhân vật/.test(h.textContent)) && /Kẻ trộm/.test(document.querySelector('.modal-body').textContent));
+        type('zzzqqq');
+        r.push(/Không tìm thấy/.test(document.querySelector('.modal-body').textContent));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        r.push(ui.rulesOpen && !document.getElementById('rulesSearch').value && !document.querySelector('.sr-group'));
+        document.title = 'SEARCHTEST ' + r.join(',');
+      }, 1500);
+    }
+    else if (which === 'lobbyjungle') {
+      const st = JSON.parse(JSON.stringify(STATES.lobby));
+      st.room.options.castMode = 'jungle';
+      st.room.members.forEach((m, i) => { if (!m.isBot) m.avatar = ['witch', 'king', 'spy'][i % 3]; });
+      handlers.state(st);
+    }
+    else if (which === 'avatarpick' || which === 'avatartest') {
+      // Phòng chờ: bấm avatar của mình → bảng chọn; chọn → lưu máy + gửi server; avatar hiện bằng icon
+      handlers.state(STATES.lobby);
+      const sent = [];
+      socket.emit = (ev, a) => sent.push([ev, a]);
+      setTimeout(() => {
+        document.querySelector('.seat .av-btn').click();
+        if (which === 'avatarpick') return;
+        const r = [];
+        r.push(document.querySelectorAll('.av-grid .av-opt').length === 25);
+        document.querySelector('.av-opt[data-av="witch"]').click();
+        r.push(!document.querySelector('.av-pick') && localStorage.getItem('citadels-avatar') === 'witch');
+        r.push(sent.some(([ev, a]) => ev === 'setAvatar' && a.avatar === 'witch'));
+        // server gửi lại trạng thái có avatar → avatar của mình là icon, không còn chữ cái
+        const st = JSON.parse(JSON.stringify(STATES.lobby));
+        st.room.members.find((m) => m.id === st.you).avatar = 'witch';
+        handlers.state(st);
+        r.push(!!document.querySelector('.seat .av-btn .avatar svg'));
+        localStorage.removeItem('citadels-avatar');
+        document.title = 'AVATARTEST ' + r.join(',');
+      }, 800);
+    }
+    else if (which === 'sidecities') { ui.sideTab = 'cities'; handlers.state(STATES.turn); ui.turnPopupHidden = true; render(); }
+    else if (which === 'sheetcities') { handlers.state(STATES.wait); setTimeout(() => openCity(1), 300); }
+    else if (which === 'sheetlog') { handlers.state(STATES.wait); ui.sheet = 'log'; render(); }
+    else if (which === 'uxtest') {
+      // Màn hẹp: bảng trượt Thành phố / Nhật ký, bảng tên 3D mở thành phố; màn rộng: tab cột phải. Cả hai: kéo lá lên bàn để xây
+      handlers.state(STATES.turn);
+      const sent = [];
+      socket.emit = (ev, a) => sent.push(a && a.type);
+      const r = [];
+      const $1 = (q) => document.querySelector(q);
+      setTimeout(() => {
+        const n = S.game.players.length;
+        if (WIDE.matches) {
+          // Mặc định đóng cả 2 tab; bấm Thành phố → mở; bấm lại → đóng
+          const closed = !$1('.side-tabs .city-list') && !$1('.side-tabs .log');
+          $1('[data-act="sideTab"][data-val="cities"]').click();
+          r.push(closed && document.querySelectorAll('.side-tabs .city-list .cc-item').length === n);
+          $1('[data-act="sideTab"][data-val="cities"]').click();
+          if ($1('.side-tabs .city-list')) r.push('not-closed');
+          $1('[data-act="sideTab"][data-val="log"]').click();
+          r.push(!!$1('.side-tabs .log') && !$1('.side-tabs .city-list'));
+          openCity(2);
+          r.push(!!$1('.side-tabs .cc-item.focus[data-pi="2"]'));
+        } else {
+          $1('[data-act="sheet"][data-val="cities"]').click();
+          r.push(document.querySelectorAll('.sheet .city-carousel .cc-item').length === n);
+          $1('.sheet .sh-head').click(); // bấm trong bảng (không phải nút) → không đóng
+          r.push(!!$1('.sheet'));
+          $1('.sheet-bg').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          r.push(!$1('.sheet'));
+          openCity(2);
+          r.push(!!$1('.sheet .cc-item.focus[data-pi="2"]'));
+          $1('.sh-x').click();
+          r.push(!$1('.sheet'));
+        }
+        // Kéo lá xây được lên bàn → gửi 'build'
+        const card = $1('.hand-tray .fan .dcard.playable');
+        if (!card) { r.push('no-playable'); document.title = 'UXTEST ' + r.join(','); return; }
+        const b = card.getBoundingClientRect();
+        const ev = (type, y) => document.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType: 'touch', clientX: b.left + b.width / 2, clientY: y, button: 0 }));
+        card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 7, pointerType: 'touch', clientX: b.left + b.width / 2, clientY: b.top + 30, button: 0 }));
+        ev('pointermove', b.top + 10); ev('pointermove', b.top - 80); ev('pointermove', 120);
+        r.push(!!$1('.drag-ghost.ok') && !!$1('.drop-hint.ok'));
+        ev('pointerup', 120);
+        r.push(sent.includes('build') && !$1('.drag-ghost'));
+        // Kéo ít rồi thả trong khay → không xây
+        sent.length = 0;
+        const c2 = $1('.hand-tray .fan .dcard.playable');
+        const b2 = c2.getBoundingClientRect();
+        c2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 8, pointerType: 'mouse', clientX: b2.left + 20, clientY: b2.top + 40, button: 0 }));
+        document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 8, pointerType: 'mouse', clientX: b2.left + 20, clientY: b2.top + 15 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, pointerType: 'mouse', clientX: b2.left + 20, clientY: b2.top + 15 }));
+        r.push(!sent.includes('build'));
+        document.title = 'UXTEST ' + r.join(',');
+      }, 1200);
     }
     else if (which === 'perf') {
       // Đo bàn 3D: số khung/giây khi đứng yên, và khi giao diện vẽ lại mà bàn không đổi (không được vẽ dồn)

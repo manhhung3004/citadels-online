@@ -1,19 +1,18 @@
 # Tiến độ dự án — Citadels Online
 
 > File bàn giao giữa các phiên làm việc. **Đọc file này đầu tiên khi tiếp tục.**
-> Cập nhật lần cuối: 2026-10-10 (phiên 2: đồ họa 3D).
+> Cập nhật lần cuối: 2026-10-14 (phiên 6: phản hồi người chơi — server sập, UX gọn 1 màn hình, Luật rừng NNHP, avatar).
 
 ## Trạng thái nhanh
 
 - Game **chơi được trọn vẹn**: 2–7 người, phòng chơi, bot, chat, luật cổ điển đầy đủ.
-- Version `1.1.0`; các thay đổi sau đó nằm trong mục `[Unreleased]` của `CHANGELOG.md`.
-- Test: `npm test` → 9 unit test + 1200 ván bot mô phỏng, **tất cả pass**.
-- ⚠️ **Git đã `init` (nhánh `main`) nhưng CHƯA có commit nào.** Phiên 2 người dùng chọn "không commit" trước khi làm 3D. Vẫn nên đề xuất commit khi họ hài lòng với giao diện 3D.
-- Bản sao lưu `public/` trước khi làm 3D chỉ nằm trong thư mục tạm của phiên 2 (sẽ mất) — nếu cần quay lại bản 2D cũ thì chỉ còn cách tắt 3D bằng nút "Tắt 3D".
+- Version `1.2.0` (tag `v1.2.0`); các thay đổi sau đó nằm trong mục `[Unreleased]` của `CHANGELOG.md`.
+- Test: `npm test` → 40 unit test + 1400 ván bot mô phỏng (có hết giờ ngẫu nhiên & Luật rừng), **tất cả pass**. Test giao diện chạy Edge thật: view `uxtest traymin clocktest sfx avatartest` (đọc kết quả qua tiêu đề trang).
+- Git: mỗi tính năng 1 nhánh → người dùng tự tạo PR & merge trên GitHub (máy không có `gh`; đưa link `compare/main...<nhánh>?expand=1&title=…&body=…`). Chỉ commit/push khi được yêu cầu.
 
 ## Cách chạy
 
-Node 18 chỉ có trong WSL (Ubuntu-24.04), Windows không có Node.
+Node 18 của dự án nằm trong WSL (Ubuntu-24.04) — chạy npm/test ở đó. Windows có Node 24 chỉ dùng cho hook plugin Claude Code.
 
 ```bash
 cd ~/game
@@ -55,6 +54,10 @@ Sửa code server phải khởi động lại server; sửa client thì chỉ c�
 20. **Skill bên thứ ba + giao diện 3D ít chữ** (phiên 4) — xem `.claude/skills/THIRD_PARTY.md` và `docs/design/2026-10-10-giao-dien-3d.md`. `renderStage()` (bàn 3D là sân khấu, `--stage-h`), `renderCallOrder()` → `.rail/.tok` + `ui.tokInfo`, `renderMeHud` chỉ icon + số, `City3D.update(g, { label })`, chất lượng 3D thích ứng (`lowEnd`, `measure()`, `kick()`/`busyUntil` → 30 FPS khi đứng yên). Người dùng chưa xem bản này — cần phản hồi (nhật ký vẫn nhiều chữ; có thể rút gọn tiếp).
 
 21. **Tối ưu điện thoại iOS/Android** (phiên 5) — xem mục đầu `[Unreleased]` trong CHANGELOG. Chạm 2 bước cho quạt bài, bàn 3D cho cuộn trang + chụm phóng to, bố cục dọc/ngang, vùng an toàn, svh/dvh, ô nhập 16px. Đã kiểm tra bằng Edge giả lập cảm ứng (`shoot.ps1 -Touch`, view `touchtap`); **chưa thử trên máy thật** — cần người dùng thử iPhone (Safari) và Android (Chrome), nhất là chụm 2 ngón trên bàn 3D và thoại.
+
+22. **Âm thanh, hiệu năng, khay bài, hết giờ** (phiên 5–6, đã merge, v1.2.0+) — `public/sfx.js` (hiệu ứng + nhạc nền Web Audio), bàn 3D chỉ vẽ dồn khi cảnh đổi, bấm "Bài trên tay" mở khay đang thu gọn, 90 giây mỗi lượt (`Game.timeout`, `syncTimer`).
+
+23. **Phản hồi người chơi đợt 1** (phiên 6, CHƯA commit lúc ghi) — server không còn sập vì gói tin lỗi (hàm bọc `on()`), gói trạng thái nhỏ hơn (80 dòng nhật ký + `mergeLog`), dọn phòng bỏ dở; UX gọn 1 màn hình (nút Rời luôn thấy, tài nguyên trên thanh điều khiển, kéo lá lên bàn để xây, tab/bảng trượt Thành phố & Nhật ký, bảng tên 3D mở thành phố); chế độ 🌲 Luật rừng NNHP; avatar; font không chân. Chưa có log máy chủ thật để xác nhận nguyên nhân sập — nếu còn sập, xin log (Render: tab Logs; Cloudflare: terminal `npm start`).
 
 ## Điểm cần nhớ khi sửa code
 

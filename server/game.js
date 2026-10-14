@@ -1,5 +1,5 @@
 // Engine luật chơi Citadels (bản 2016) — toàn bộ logic chạy ở server.
-const { CHARACTERS, BASE_CAST, castProblem, buildDeck } = require('./cards');
+const { CHARACTERS, BASE_CAST, castProblem, randomCast, buildDeck } = require('./cards');
 
 const COLORS = ['yellow', 'blue', 'green', 'red', 'purple'];
 const COLOR_NAME = { yellow: 'Quý tộc', blue: 'Tôn giáo', green: 'Thương mại', red: 'Quân sự', purple: 'Đặc biệt' };
@@ -92,12 +92,15 @@ class Game {
     this.round = 0;
     this.log = [];
     this.logSeq = 0;
+    this.gameId = Math.random().toString(36).slice(2, 10); // client gộp nhật ký theo ván (mỗi lần chỉ gửi phần cuối)
     this.firstComplete = null;
     this.results = null;
     this.taxPool = 0; // kho thuế của Người thu thuế (giữ qua các vòng)
     // Bộ nhân vật bí mật (chế độ ngẫu nhiên): mỗi người chỉ biết tên nhân vật đã thấy khi chọn,
     // hoặc đã được nêu tên công khai (lật ngửa, được gọi, bị nhắm...). Xem charName / markSeen / viewFor.
     this.secret = !!opts.secretCast;
+    // Luật rừng NNHP: mỗi vòng rút lại bộ nhân vật (mỗi số ngẫu nhiên 1 trong 3), thay vì cố định cả ván
+    this.jungle = !!opts.reshuffle;
     this.publicRanks = new Set();
     this.seen = this.players.map(() => new Set());
     this.startRound();
@@ -216,6 +219,7 @@ class Game {
   // ---------- chọn nhân vật ----------
   startRound() {
     this.round++;
+    if (this.jungle && this.round > 1) this.rerollCast();
     this.phase = 'draft';
     this.killed = null;
     this.robbed = null;
@@ -263,6 +267,17 @@ class Game {
         `Out this round: **${faceUp.map((r) => this.charNameEn(r)).join(', ')}**`, 'muted');
     }
     this.markSeen();
+  }
+
+  // Luật rừng NNHP: bộ nhân vật mới cho vòng này (luôn hợp lệ với số người — randomCast kiểm tra castProblem).
+  // Bộ bí mật: những gì đã biết về vòng trước không còn đúng → quên hết, vòng này biết lại từ đầu.
+  rerollCast() {
+    const keys = randomCast(this.players.length);
+    this.cast = {};
+    for (const k of keys) this.cast[CHARACTERS[k].rank] = k;
+    this.maxRank = this.cast[9] ? 9 : 8;
+    if (this.secret) { this.publicRanks = new Set(); this.seen = this.players.map(() => new Set()); }
+    this.addLog('🌲 **Luật rừng NNHP** — bộ nhân vật vòng này đã được rút lại', '🌲 **NNHP Jungle rule** — the character set has been re-drawn for this round', 'round');
   }
 
   draftOptions() {
@@ -1183,7 +1198,9 @@ class Game {
       taxPool: this.cast[9] === 'taxcollector' ? this.taxPool : null,
       firstComplete: this.firstComplete,
       uniqueKeys: this.uniqueKeys,
-      log: this.log.slice(-250),
+      gameId: this.gameId,
+      // Chỉ gửi 80 dòng cuối (đủ cho mọi bước giữa 2 lần gửi); client tự gộp phần cũ — trước đây nhật ký chiếm ~70% gói tin
+      log: this.log.slice(-80),
       results: this.results,
       actor: this.currentActor(),
       // Diễn biến công khai: nhân vật bị ám sát chỉ lộ chủ khi hết vòng (pi = null)
