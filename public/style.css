@@ -1663,7 +1663,7 @@ body.tray-peek .hand-tray .tray-hint { position: relative; z-index: 2; margin-bo
 }
 
 /* Bảng tên trên bàn 3D bấm được → xem thành phố người đó */
-.c3-label .c3-hit { pointer-events: auto; cursor: pointer; }
+/* Bảng tên 3D không nhận chuột (kéo xoay / lăn phóng to trên cả bảng tên); bấm trúng bảng tên được xử lý trong app.js (c3Down) */
 
 /* Cột phải (màn rộng): tab Thành phố / Nhật ký */
 .side-tabs { padding: 10px 12px 12px; }

@@ -141,6 +141,43 @@
         }, 900);
       }
     }
+    else if (which === 'orbit3d') {
+      // Kéo chuột trên canvas phải xoay camera; lăn chuột phải đổi khoảng cách camera
+      handlers.state(STATES.wait);
+      setTimeout(() => {
+        const sc = City3D._scene();
+        const c = sc.renderer.domElement;
+        const b = c.getBoundingClientRect();
+        const cam = sc.camera.position;
+        const p0 = cam.clone();
+        const x = b.left + b.width * 0.5, y = b.top + b.height * 0.6;
+        const pe = (type, dx) => c.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 3, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x + dx, clientY: y }));
+        pe('pointerdown', 0); for (let i = 1; i <= 10; i++) pe('pointermove', i * 15); pe('pointerup', 150);
+        setTimeout(() => {
+          const rot = cam.distanceTo(p0);
+          const d0 = cam.distanceTo(sc.controls.target);
+          c.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 300, clientX: x, clientY: y }));
+          setTimeout(() => {
+            const d1 = cam.distanceTo(sc.controls.target);
+            document.title = `ORBIT3D rotate=${rot.toFixed(2)} zoom=${d0.toFixed(1)}→${d1.toFixed(1)} enabled=${sc.controls.enabled} uiz=${document.documentElement.style.zoom || 1}`;
+          }, 600);
+        }, 600);
+      }, 2500);
+    }
+    else if (which === 'probe3d') {
+      // Bàn 3D: phần tử nằm trên cùng tại vài điểm trên canvas phải là chính canvas (không bị lớp khác che)
+      handlers.state(STATES.wait);
+      setTimeout(() => {
+        const c = document.querySelector('.city3d canvas');
+        if (!c) { document.title = 'PROBE3D no-canvas'; return; }
+        const b = c.getBoundingClientRect();
+        const pts = [[.5, .5], [.25, .7], [.75, .3], [.5, .85]].map(([fx, fy]) => {
+          const el = document.elementFromPoint(b.left + b.width * fx, b.top + b.height * fy);
+          return el === c ? 'ok' : (el ? `${el.tagName.toLowerCase()}.${String(el.className).split(' ').join('.')}` : 'null');
+        });
+        document.title = `PROBE3D ${pts.join(' | ')} | zoom=${document.documentElement.style.zoom || 1} | ta=${getComputedStyle(c.parentElement).touchAction}`;
+      }, 2500);
+    }
     else if (which === 'scrolltest') {
       // Phòng chờ cuộn xuống cuối (nút Bắt đầu) → vào ván: màn chơi phải ở đầu trang
       handlers.state(STATES.lobby);
@@ -244,7 +281,13 @@
     else if (which === 'sheetlog') { handlers.state(STATES.wait); ui.sheet = 'log'; render(); }
     else if (which === 'uxtest') {
       // Màn hẹp: bảng trượt Thành phố / Nhật ký, bảng tên 3D mở thành phố; màn rộng: tab cột phải. Cả hai: kéo lá lên bàn để xây
-      handlers.state(STATES.turn);
+      // Trạng thái mẫu sinh ngẫu nhiên → bảo đảm có ≥ 2 lá xây được (đã nhận tài nguyên, chưa xây)
+      const ux = JSON.parse(JSON.stringify(STATES.turn));
+      Object.assign(ux.game.turn, { actionTaken: true, builds: 0, maxBuilds: Math.max(1, ux.game.turn.maxBuilds || 1) });
+      ux.game.costs = Object.fromEntries(ux.game.hand.map((c) => [c.id, { cost: 1 }]));
+      ui.turnPopupHidden = true;
+      handlers.state(ux);
+      ui.turnPopupHidden = true; render();
       const sent = [];
       socket.emit = (ev, a) => sent.push(a && a.type);
       const r = [];

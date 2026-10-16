@@ -889,7 +889,7 @@ function sync3d() {
   const marks = skillMarks(g);
   City3D.update(g, {
     lang: ui.lang,
-    label: (p, i) => `<div class="c3-hit" data-act="cityOf" data-pi="${i}" title="${tx('Xem thành phố', 'View city')}"><div class="c3-n">${p.hasCrown ? `<span class="c3-crown">${icon('king')}</span>` : ''}<b>${esc(p.name)}</b>${i === g.me ? `<em>${tx('bạn', 'you')}</em>` : ''}</div>
+    label: (p, i) => `<div class="c3-hit" data-pi="${i}"><div class="c3-n">${p.hasCrown ? `<span class="c3-crown">${icon('king')}</span>` : ''}<b>${esc(p.name)}</b>${i === g.me ? `<em>${tx('bạn', 'you')}</em>` : ''}</div>
       <div class="c3-s"><span title="${tx('Vàng', 'Gold')}">${icon('gold')}${p.gold}</span><span>${icon('cards')}${p.handCount}</span><span>${icon('city')}${p.citySize ?? p.city.length}/${g.target}</span></div>
       ${p.chars.length ? `<div class="c3-ch">${p.chars.map((c) => medal(c, 'xs')).join('')}</div>` : ''}</div>`,
     destroyable: marks,
@@ -1169,6 +1169,15 @@ function renderSheet(g) {
       <div class="city-carousel">${cityList(g)}</div>`;
   return `<div class="sheet-bg" data-act="sheet" data-val=""><div class="sheet sh-${ui.sheet}" data-act="sheetStay">${body}</div></div>`;
 }
+// Bảng tên trên bàn 3D không nhận chuột (để kéo xoay / lăn phóng to cả trên bảng tên) → bấm mà không kéo,
+// trúng bảng tên nào thì mở thành phố người đó (không áp khi đang chọn công trình mục tiêu, vd. Lãnh chúa phá nhà)
+let c3Down = null;
+document.addEventListener('pointerdown', (e) => { c3Down = e.target.closest && e.target.closest('.city3d') ? [e.clientX, e.clientY] : null; }, true);
+document.addEventListener('click', (e) => {
+  if (!c3Down || ui.mode || Math.hypot(e.clientX - c3Down[0], e.clientY - c3Down[1]) > 6) return;
+  const hit = [...document.querySelectorAll('.city3d .c3-hit')].find((el) => inRect(el.getBoundingClientRect(), e.clientX, e.clientY));
+  if (hit) openCity(Number(hit.dataset.pi));
+});
 // Mở thành phố của 1 người (từ bảng tên trên bàn 3D)
 function openCity(pi) {
   ui.cityFocus = pi;
@@ -2218,7 +2227,6 @@ document.addEventListener('click', (e) => {
       return render();
     }
     case 'sideTab': ui.sideTab = ui.sideTab === el.dataset.val ? null : el.dataset.val; return render();
-    case 'cityOf': return openCity(Number(el.dataset.pi));
     case 'sfx': Sfx.toggle(); return render();
     case 'music': Sfx.toggleMusic(); return render();
     case 'create': {

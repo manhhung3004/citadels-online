@@ -444,7 +444,7 @@ class CityScene {
       this.renderer.setPixelRatio(1);
       this.sun.shadow.mapSize.set(1024, 1024);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
-      this.shadowUntil = now + 200;
+      this.shadowDirty = true;
       this.resize();
     }
   }
@@ -585,7 +585,7 @@ class CityScene {
     this.firstFill = false;
     if (changed) {
       this.kick(1600); // nhà mọc / lún, vương miện bay
-      this.shadowUntil = performance.now() + 1700;
+      this.shadowDirty = true;
     }
   }
 
@@ -724,6 +724,8 @@ class CityScene {
       this.crown.visible = true;
     } else this.crown.visible = false;
 
+    // Bóng cần tính lại (nhà đổi): bắt đầu đếm từ khung vẽ thật đầu tiên — lúc đổi mà bàn đang khuất (cuộn đi / tab ẩn) thì không mất
+    if (this.shadowDirty) { this.shadowDirty = false; this.shadowUntil = now + 1700; }
     this.renderer.shadowMap.needsUpdate = now < this.shadowUntil;
     this.renderer.render(this.scene, this.camera);
     // Nhãn tên là phần tử DOM: chỉ cập nhật vị trí khi camera / nội dung đổi (tránh ghi style mỗi khung)
