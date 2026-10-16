@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Sửa lỗi — bàn 3D không xoay / phóng to được
+- Bảng tên người chơi trên bàn 3D (to, nằm khắp giữa bàn) nhận chuột để bấm mở thành phố → kéo xoay hay lăn phóng to bắt đầu trên bảng tên thì bàn không nhận. Bảng tên trở lại không nhận chuột; bấm mà không kéo trúng bảng tên vẫn mở thành phố (`c3Down` trong app.js). Kiểm tra bằng chuột / chạm thật (CDP) ở 1920, 1366, điện thoại, iPad.
+- Bóng đổ không được tính lại nếu nhà mới xây đúng lúc bàn 3D đang khuất (cuộn đi / tab ẩn): giờ bắt đầu đếm từ khung vẽ thật đầu tiên (`shadowDirty`).
+
 ### Thay đổi — Luật rừng NNHP giấu kỹ hơn
 - Chỉ ở chế độ 🌲 Luật rừng NNHP (Ngẫu nhiên / Tự chọn giữ nguyên): tên nhân vật của mỗi số chỉ hiện khi số đó **được gọi lộ diện**. Lá thấy lúc chọn mà không lấy quay về "?" ngay sau khi chọn; lá bị loại đầu vòng cũng úp; nhật ký ghi "nhân vật số N" thay vì tên cho số chưa lộ diện (vd. "Sát thủ ám sát nhân vật số 4"). Luôn biết nhân vật của mình; hết ván lộ toàn bộ (`Game.hiddenRank`, `charName`, `viewFor` → `knows`). Test mới quét toàn ván ở 4–7 người.
 
